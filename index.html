@@ -1,0 +1,4291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>電商資料分析工具</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyACFchl6LtzQAWk_VuvMj7XVZCqUwyhcFA",
+    authDomain: "lumarkbd.firebaseapp.com",
+    projectId: "lumarkbd",
+    storageBucket: "lumarkbd.firebasestorage.app",
+    messagingSenderId: "91842916197",
+    appId: "1:91842916197:web:f515a27c3fc3c8cb7dbb8c"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  // 監聽登入狀態
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-screen').style.display = 'flex';
+      document.getElementById('user-email').textContent = user.email;
+    } else {
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app-screen').style.display = 'none';
+    }
+  });
+
+  // 登入
+  window.doLogin = async function() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    const btn = document.getElementById('login-btn');
+    errEl.textContent = '';
+    btn.textContent = '登入中...'; btn.disabled = true;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch(e) {
+      const msgs = {
+        'auth/invalid-email': '電子郵件格式不正確',
+        'auth/user-not-found': '找不到此帳號',
+        'auth/wrong-password': '密碼錯誤',
+        'auth/invalid-credential': '帳號或密碼錯誤',
+        'auth/too-many-requests': '登入失敗次數過多，請稍後再試',
+      };
+      errEl.textContent = msgs[e.code] || '登入失敗：' + e.message;
+      btn.textContent = '登入'; btn.disabled = false;
+    }
+  };
+
+  // 登出
+  window.doLogout = async function() {
+    await signOut(auth);
+  };
+
+  // 忘記密碼
+  window.doForgotPassword = async function() {
+    const email = document.getElementById('login-email').value.trim();
+    if (!email) { alert('請先填入電子郵件'); return; }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert('✅ 密碼重設信已寄出，請檢查你的信箱！');
+    } catch(e) {
+      alert('寄送失敗：' + e.message);
+    }
+  };
+
+  // Enter 鍵登入
+  window.loginKeydown = function(e) {
+    if (e.key === 'Enter') window.doLogin();
+  };
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RESET & ROOT — Lumark Dark Theme
+============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  /* Dark background system */
+  --bg: #0e1a22;
+  --bg2: #0c1a24;
+  --surface: rgba(255,255,255,0.05);
+  --surface2: rgba(255,255,255,0.03);
+  --surface-solid: #0f2030;
+  --surface-hover: rgba(255,255,255,0.08);
+  --glass: rgba(255,255,255,0.06);
+  --glass-border: rgba(255,255,255,0.12);
+  --glass-border-hover: rgba(255,255,255,0.22);
+
+  /* Text */
+  --text: rgba(255,255,255,0.92);
+  --text2: rgba(255,255,255,0.55);
+  --text3: rgba(255,255,255,0.32);
+
+  /* Borders */
+  --border: rgba(255,255,255,0.08);
+  --border-md: rgba(255,255,255,0.15);
+
+  /* Brand colours */
+  --teal: #3ecfaa;
+  --teal-dark: #1D9E75;
+  --teal-glow: rgba(62,207,170,0.15);
+  --blue: #5ba4e8;
+  --blue-light: rgba(91,164,232,0.15);
+  --blue2: #378ADD;
+  --green: #3ecfaa;
+  --green-bg: rgba(62,207,170,0.12);
+  --green-text: #3ecfaa;
+  --green-light: rgba(62,207,170,0.12);
+  --green-dark: #1D9E75;
+  --red: #f07070;
+  --red-bg: rgba(240,112,112,0.12);
+  --red-text: #f07070;
+  --orange: #e8934a;
+
+  /* Platform colours */
+  --shopee: #ff6240;
+  --momo: #ff4d6a;
+
+  /* Layout */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --sidebar-w: 224px;
+}
+
+body {
+  font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  background: #0e1a22;
+  background-image:
+    radial-gradient(ellipse 110% 70% at 0% 0%,   #0a2233 0%, transparent 55%),
+    radial-gradient(ellipse 90%  80% at 100% 0%,  #0d2b2a 0%, transparent 55%),
+    radial-gradient(ellipse 100% 60% at 50% 100%, #0a1f2e 0%, transparent 60%),
+    radial-gradient(ellipse 70%  50% at 15% 60%,  rgba(20,90,90,0.55)  0%, transparent 50%),
+    radial-gradient(ellipse 60%  45% at 85% 40%,  rgba(15,60,90,0.50)  0%, transparent 50%),
+    radial-gradient(ellipse 50%  40% at 50% 30%,  rgba(10,50,70,0.40)  0%, transparent 50%);
+  background-attachment: fixed;
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+}
+
+/* Global table text color for dark theme */
+td[style*="position:sticky"] { background: #0c1e2e !important; color: rgba(255,255,255,0.88) !important; }
+input, select, textarea {
+  color: rgba(255,255,255,0.88) !important;
+  background: rgba(255,255,255,0.06) !important;
+}
+input::placeholder { color: rgba(255,255,255,0.35) !important; }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.5); }
+table td, table th { color: rgba(255,255,255,0.82); }
+table thead th { color: rgba(255,255,255,0.55) !important; background: rgba(255,255,255,0.06) !important; }
+table tbody tr:hover { background: rgba(255,255,255,0.05) !important; }
+table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.07) !important; }
+
+/* ============================================================
+   SIDEBAR
+============================================================ */
+.sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  background: rgba(8,20,28,0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 200;
+}
+
+.sidebar-logo {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar-logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, #1D9E75, #378ADD);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  box-shadow: 0 0 16px rgba(29,158,117,0.4);
+}
+.sidebar-logo-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+.sidebar-logo-sub {
+  font-size: 10px;
+  color: var(--text3);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+.sidebar-section-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  padding: 18px 18px 6px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text2);
+  transition: all .15s;
+  user-select: none;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+.nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.nav-item.active {
+  background: rgba(62,207,170,0.1);
+  color: var(--teal);
+  font-weight: 600;
+  border: 1px solid rgba(62,207,170,0.2);
+}
+.nav-item.active.shopee {
+  color: var(--shopee);
+  background: rgba(255,98,64,0.1);
+  border-color: rgba(255,98,64,0.2);
+}
+.nav-item.active.momo {
+  color: var(--momo);
+  background: rgba(255,77,106,0.1);
+  border-color: rgba(255,77,106,0.2);
+}
+.nav-icon {
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+  background: var(--surface);
+  transition: background .15s;
+}
+.nav-item.active .nav-icon { background: var(--surface-hover); }
+.nav-item-text { flex: 1; }
+
+.sidebar-footer {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   MAIN CONTENT
+============================================================ */
+.main-wrapper {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.tool-panel {
+  display: none;
+}
+.tool-panel.active {
+  display: block;
+}
+
+/* ============================================================
+   WELCOME SCREEN
+============================================================ */
+.welcome-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  padding: 40px;
+  text-align: center;
+  color: var(--text3);
+}
+.welcome-screen .icon { font-size: 52px; margin-bottom: 20px; filter: drop-shadow(0 0 20px rgba(62,207,170,0.4)); }
+.welcome-screen h2 { font-size: 20px; font-weight: 400; color: var(--text); margin-bottom: 10px; letter-spacing: 0.02em; }
+.welcome-screen p { font-size: 13px; color: var(--text2); }
+
+/* ============================================================
+   SHARED TOOL STYLES (applies to both shopee & momo)
+============================================================ */
+
+/* --- Header --- */
+#tool-shopee .page-header,
+#tool-momo .header {
+  background: rgba(8,20,28,0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--glass-border);
+  padding: 0 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px;
+  position: sticky; top: 0; z-index: 100;
+}
+#tool-shopee .logo,
+#tool-momo .header-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 15px; font-weight: 500; color: var(--text);
+}
+#tool-shopee .logo-icon,
+#tool-momo .header-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: white;
+}
+#tool-shopee .logo-icon { background: var(--shopee); box-shadow: 0 0 12px rgba(255,98,64,0.35); }
+#tool-momo .header-icon { background: var(--momo); box-shadow: 0 0 12px rgba(255,77,106,0.35); }
+#tool-shopee .logo-icon svg { width: 16px; height: 16px; fill: white; }
+#tool-shopee .header-sub,
+#tool-momo .header-sub { font-size: 12px; color: var(--text3); }
+#tool-momo .header-title { font-size: 15px; font-weight: 500; }
+
+/* --- Content container --- */
+#tool-shopee .container,
+#tool-momo .main {
+  max-width: 1200px; margin: 0 auto; padding: 28px 24px 48px;
+}
+/* --- Main wrapper background --- */
+.main-wrapper { background: transparent; }
+
+/* --- Upload outer card --- */
+#tool-shopee .upload-card,
+#tool-momo .upload-section {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(12px);
+}
+
+/* --- Section label / upload title --- */
+#tool-shopee .section-label,
+#tool-momo .upload-title {
+  font-size: 10px; font-weight: 600; color: var(--text3);
+  margin-bottom: 14px; text-transform: uppercase; letter-spacing: .1em;
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* --- Periods grid --- */
+#tool-shopee .periods-grid,
+#tool-momo .upload-cols {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+
+/* --- Period card/box --- */
+#tool-shopee .period-box,
+#tool-momo .period-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+#tool-shopee .period-box.prev,
+#tool-momo .period-card.prev { border-top: 2px solid rgba(91,164,232,0.6); }
+#tool-shopee .period-box.curr,
+#tool-momo .period-card.curr { border-top: 2px solid rgba(62,207,170,0.6); }
+
+/* --- Period header --- */
+#tool-shopee .period-header,
+#tool-momo .period-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; background: rgba(255,255,255,0.03);
+  font-weight: 500; font-size: 13px; color: var(--text);
+}
+
+/* --- Period badge --- */
+#tool-shopee .period-badge,
+#tool-momo .period-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 10px; border-radius: 20px; font-size: 10px; font-weight: 600;
+}
+#tool-shopee .period-badge.prev,
+#tool-momo .period-badge.prev { background: rgba(91,164,232,0.15); color: var(--blue); border: 1px solid rgba(91,164,232,0.25); }
+#tool-shopee .period-badge.curr,
+#tool-momo .period-badge.curr { background: rgba(62,207,170,0.15); color: var(--teal); border: 1px solid rgba(62,207,170,0.25); }
+
+/* --- Period body / slots --- */
+#tool-shopee .period-body,
+#tool-momo .period-slots { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* --- Upload slot & label --- */
+#tool-shopee .upload-slot,
+#tool-momo .upload-slot { position: relative; }
+#tool-shopee .upload-slot-label,
+#tool-momo .upload-slot label {
+  display: block; font-size: 11px; color: var(--text2); margin-bottom: 5px; font-weight: 500; letter-spacing: 0.02em;
+}
+
+/* --- Dropzone --- */
+#tool-shopee .upload-dropzone,
+#tool-momo .upload-dropzone {
+  border: 1px dashed var(--glass-border); border-radius: var(--radius-sm);
+  padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+  cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.02); min-height: 44px; position: relative;
+}
+#tool-shopee .upload-dropzone:hover { border-color: var(--shopee); background: rgba(255,98,64,0.06); }
+#tool-momo .upload-dropzone:hover { border-color: var(--momo); background: #fff0f2; }
+#tool-shopee .upload-dropzone.has-file,
+#tool-momo .upload-dropzone.has-file { border-color: var(--green); border-style: solid; }
+#tool-shopee .upload-dropzone input[type=file],
+#tool-momo .upload-dropzone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; display: block;
+}
+#tool-shopee .upload-icon,
+#tool-momo .upload-icon { font-size: 16px; flex-shrink: 0; }
+#tool-shopee .upload-text,
+#tool-momo .upload-text { flex: 1; min-width: 0; }
+#tool-shopee .upload-text .placeholder,
+#tool-momo .upload-text .placeholder { color: var(--text2); font-size: 12px; }
+#tool-shopee .upload-text .filename,
+#tool-momo .upload-text .filename { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tool-shopee .upload-text .rowcount,
+#tool-momo .upload-text .rowcount { font-size: 11px; color: var(--green); }
+#tool-shopee .upload-clear,
+#tool-momo .upload-clear {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #fee2e2; color: #dc2626; border: none; cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; line-height: 1; transition: background 0.15s; position: relative; z-index: 2;
+}
+#tool-shopee .upload-clear:hover,
+#tool-momo .upload-clear:hover { background: #fca5a5; }
+
+/* --- KPI row --- */
+#tool-shopee .kpi-row,
+#tool-momo .kpi-row { /* Momo/Shopee KPI row */ display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 20px; }
+#tool-shopee .kpi-card,
+#tool-momo .kpi-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow);
+  position: relative;
+}
+#tool-shopee .kpi-label,
+#tool-momo .kpi-label { font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 500; margin-bottom: 6px; }
+#tool-shopee .kpi-value,
+#tool-momo .kpi-value { font-size: 22px; font-weight: 700; line-height: 1.2; color: var(--text); }
+#tool-shopee .kpi-sub,
+#tool-momo .kpi-sub,
+#tool-shopee .kpi-change,
+#tool-momo .kpi-change { font-size: 12px; margin-top: 4px; font-weight: 500; color: var(--text3); }
+#tool-shopee .kpi-sub.up, #tool-momo .kpi-sub.up,
+#tool-shopee .kpi-change.up, #tool-momo .kpi-change.up { color: var(--green); }
+#tool-shopee .kpi-sub.down, #tool-momo .kpi-sub.down,
+#tool-shopee .kpi-change.down, #tool-momo .kpi-change.down { color: var(--red); }
+#tool-shopee .kpi-value.blue { color: var(--blue); }
+#tool-shopee .kpi-value.orange { color: var(--orange); }
+#tool-momo .kpi-value.blue { color: var(--blue2); }
+#tool-momo .kpi-value.orange { color: var(--orange); }
+
+/* --- Analyze button wrap & button --- */
+#tool-shopee .analyze-wrap,
+#tool-momo .analyze-wrap { text-align: center; margin-bottom: 24px; }
+#tool-shopee .analyze-btn,
+#tool-momo .btn-analyze {
+  padding: 13px 56px; border-radius: 32px; border: none; cursor: pointer;
+  font-size: 15px; font-weight: 700; font-family: inherit;
+  letter-spacing: 0.04em; transition: all 0.25s;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #d1d5db; color: #9ca3af;
+}
+#tool-shopee .analyze-btn:disabled,
+#tool-momo .btn-analyze:disabled { cursor: not-allowed; opacity: 1; }
+#tool-shopee .analyze-btn.ready { background: var(--shopee); color: white; box-shadow: 0 4px 20px rgba(238,77,45,0.3); }
+#tool-shopee .analyze-btn.ready:hover { background: #d03a1c; transform: translateY(-1px); }
+#tool-momo .btn-analyze.active { background: var(--momo); color: white; box-shadow: 0 4px 20px rgba(204,0,51,0.3); }
+#tool-momo .btn-analyze.active:hover { background: #aa0028; transform: translateY(-1px); }
+
+/* --- Error bar --- */
+#tool-shopee .err-bar,
+#tool-momo .err-bar {
+  font-size: 13px; color: var(--red-text); padding: 10px 14px;
+  background: var(--red-bg); border: 1px solid rgba(226,75,74,.2);
+  border-radius: var(--radius-sm); margin-bottom: 14px; display: none;
+}
+
+/* --- Result card / results section --- */
+#tool-shopee .result-card,
+#tool-momo .results-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+}
+#tool-shopee .result-card { display: none; }
+#tool-shopee .result-card.show { display: block; }
+
+/* --- Tabs bar --- */
+#tool-shopee .tabs,
+#tool-momo .tabs {
+  display: flex; border-bottom: 2px solid var(--border);
+  background: var(--surface2); padding: 0 8px; gap: 2px;
+}
+#tool-shopee .tab-btn,
+#tool-momo .tab-btn {
+  padding: 13px 20px; border: none; background: none; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--text2); border-bottom: 3px solid transparent;
+  margin-bottom: -2px; transition: all 0.2s; white-space: nowrap;
+}
+#tool-shopee .tab-btn:hover,
+#tool-momo .tab-btn:hover { color: var(--text); }
+#tool-shopee .tab-btn.active { color: var(--shopee); border-bottom-color: var(--shopee); }
+#tool-momo .tab-btn.active { color: var(--momo); border-bottom-color: var(--momo); }
+
+/* --- Download button --- */
+#tool-shopee .dl-btn,
+#tool-momo .btn-download {
+  align-self: center; margin: auto 10px auto auto;
+  padding: 6px 16px; border-radius: 20px;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+#tool-shopee .dl-btn { border: 1.5px solid var(--shopee); background: white; color: var(--shopee); }
+#tool-shopee .dl-btn:hover { background: var(--shopee); color: white; }
+#tool-momo .btn-download { border: 1.5px solid var(--momo); background: white; color: var(--momo); }
+#tool-momo .btn-download:hover { background: var(--momo); color: white; }
+
+#tool-shopee .tab-panel,
+#tool-momo .tab-panel { display: none; overflow-x: auto; }
+#tool-shopee .tab-panel.active,
+#tool-momo .tab-panel.active { display: block; }
+
+/* --- Col detect panel (momo only) --- */
+#tool-momo .col-detect-panel {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 16px 20px; margin-bottom: 16px;
+  box-shadow: var(--shadow); font-size: 12px; display: none;
+}
+#tool-momo .col-detect-title { font-weight: 600; margin-bottom: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; }
+#tool-momo .col-detect-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+#tool-momo .col-card { background: var(--bg); border-radius: 6px; padding: 8px 12px; border: 1px solid var(--border); }
+#tool-momo .col-card-title { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+#tool-momo .col-card-row { font-size: 11px; margin-top: 2px; }
+
+/* --- Zero list popup --- */
+#tool-shopee #s-kpi-zero-list {
+  display: none; position: fixed;
+  background: #1a1a1a; color: #fff;
+  border-radius: 8px; padding: 12px 14px;
+  font-size: 12px; z-index: 9999;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+  pointer-events: auto; min-width: 200px; max-width: 320px; max-height: 360px; overflow-y: auto;
+}
+#tool-shopee #s-kpi-zero-list .kzl-close {
+  position: sticky; top: 0; float: right;
+  background: #333; border: none; color: #aaa; cursor: pointer;
+  border-radius: 4px; padding: 1px 6px; font-size: 11px; margin-left: 8px; font-family: inherit;
+}
+#tool-shopee #s-kpi-zero-list .kzl-close:hover { color: #fff; }
+#tool-shopee .kzl-title { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing:.05em; margin-bottom: 8px; }
+#tool-shopee .kzl-item { padding: 4px 0; border-bottom: 1px solid #333; font-size: 12px; line-height: 1.4; color: #eee; }
+#tool-shopee .kzl-item:last-child { border-bottom: none; }
+
+/* --- Shopee-only table styles --- */
+#tool-shopee .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#tool-shopee .data-table th { padding: 10px 14px; font-size: 11px; font-weight: 700; color: var(--text2); text-align: right; background: var(--surface2); border-bottom: 2px solid var(--border); white-space: nowrap; text-transform: uppercase; letter-spacing: .04em; }
+#tool-shopee .data-table th:first-child, #tool-shopee .data-table th:nth-child(2) { text-align: left; }
+#tool-shopee .data-table td { padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.07); vertical-align: middle; text-align: right; }
+#tool-shopee .data-table td:first-child, #tool-shopee .data-table td:nth-child(2) { text-align: left; }
+#tool-shopee .data-table tbody tr:last-child td { border-bottom: none; }
+#tool-shopee .data-table tbody tr:hover td { background: #fafaf8; }
+#tool-shopee .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+#tool-shopee .rank-1 { background: #FAC775; color: #412402; }
+#tool-shopee .rank-2 { background: #D3D1C7; color: #2C2C2A; }
+#tool-shopee .rank-3 { background: #F0997B; color: #4A1B0C; }
+#tool-shopee .rank-n { background: #efefec; color: var(--text2); }
+#tool-shopee .prod-name { font-size: 13px; line-height: 1.4; max-width: 320px; }
+#tool-shopee .metric-cell { position: relative; cursor: default; white-space: nowrap; }
+#tool-shopee .metric-main { display: inline-flex; align-items: center; gap: 5px; }
+#tool-shopee .metric-val { font-variant-numeric: tabular-nums; color: rgba(255,255,255,0.88); }
+#tool-shopee .g-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+#tool-shopee .g-dot.up { background: #3ecfaa; }
+#tool-shopee .g-dot.dn { background: #f07070; }
+#tool-shopee .g-dot.eq { background: var(--text3); }
+#tool-shopee .g-dot.new { background: var(--blue); }
+#tool-shopee .table-note { font-size: 11px; color: rgba(255,255,255,0.35); padding: 9px 14px; border-top: 1px solid var(--border); background: var(--surface2); }
+#tool-shopee .rank-curr { font-weight: 700; color: var(--text); }
+#tool-shopee .rank-gone { color: var(--red); font-weight: 600; font-size: 12px; }
+#tool-shopee .empty-state { padding: 40px; text-align: center; color: var(--text3); font-size: 13px; }
+#tool-shopee .expand-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px; border: 1px solid var(--border-md); background: var(--surface2); cursor: pointer; flex-shrink: 0; margin-left: 6px; font-size: 10px; color: var(--text2); transition: background .12s, transform .2s; vertical-align: middle; user-select: none; }
+#tool-shopee .expand-btn:hover { background: #e8e7e3; }
+#tool-shopee .expand-btn.open { transform: rotate(90deg); background: #e8e7e3; }
+#tool-shopee .sku-rows { display: none; }
+#tool-shopee .sku-rows.open { display: table-row-group; }
+#tool-shopee .sku-row td { padding: 7px 14px 7px 28px; background: #fafaf8; border-bottom: 1px solid rgba(255,255,255,0.07); font-size: 12px; color: var(--text2); }
+#tool-shopee .sku-row td.r { text-align: right; }
+#tool-shopee .sku-name { display: flex; align-items: center; gap: 6px; }
+#tool-shopee .sku-name::before { content: ''; display: inline-block; width: 12px; height: 1px; background: var(--border-md); flex-shrink: 0; }
+#tool-shopee .sku-tag { font-size: 11px; color: var(--text3); background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
+#tool-shopee .tt-row { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
+#tool-shopee .tt-row:last-child { margin-bottom: 0; }
+#tool-shopee .tt-label { color: #aaa; }
+#tool-shopee .tt-val { font-weight: 600; }
+#tool-shopee .tt-val.tt-up { color: #6ee7b7; }
+#tool-shopee .tt-val.tt-dn { color: #fca5a5; }
+#tool-shopee .tt-val.tt-eq { color: #aaa; }
+#tool-shopee .tt-divider { border-top: 1px solid #333; margin: 6px 0; }
+#tool-shopee .tt-title { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 7px; }
+
+/* --- Momo-only table styles --- */
+#tool-momo .table-wrap { overflow-x: auto; max-height: 580px; overflow-y: auto; }
+#tool-momo table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#tool-momo thead { position: sticky; top: 0; z-index: 10; }
+#tool-momo thead th { background: rgba(255,255,255,0.06); padding: 10px 14px; text-align: right; font-weight: 500; font-size: 11px; color: rgba(255,255,255,0.55); letter-spacing: 0.04em; border-bottom: 2px solid var(--border); white-space: nowrap; text-transform: uppercase; letter-spacing: .04em; }
+#tool-momo thead th:first-child { text-align: center; width: 60px; }
+#tool-momo thead th.name-col { text-align: left; }
+#tool-momo tbody tr { border-bottom: 1px solid rgba(255,255,255,0.07); transition: background 0.15s; }
+#tool-momo tbody tr:last-child { border-bottom: none; }
+#tool-momo tbody tr:hover { background: rgba(255,255,255,0.05); }
+#tool-momo td { padding: 11px 14px; text-align: right; vertical-align: middle; color: rgba(255,255,255,0.82); }
+#tool-momo td:first-child { text-align: center; }
+#tool-momo td.name-col { text-align: left; font-weight: 500; }
+#tool-momo .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+#tool-momo .rank-1 { background: rgba(239,168,34,0.18); color: #efb822; border: 1px solid rgba(239,168,34,0.3); }
+#tool-momo .rank-2 { background: rgba(180,178,169,0.15); color: #b4b2a9; border: 1px solid rgba(180,178,169,0.25); }
+#tool-momo .rank-3 { background: rgba(216,90,48,0.15); color: #e87a42; border: 1px solid rgba(216,90,48,0.25); }
+#tool-momo .rank-n { background: rgba(255,255,255,0.05); color: var(--text2); font-size: 12px; font-weight: 500; }
+#tool-momo .num-cell { display: inline-flex; align-items: center; gap: 5px; cursor: default; }
+#tool-momo .num-val { font-variant-numeric: tabular-nums; }
+#tool-momo .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+#tool-momo .dot-up { background: #3ecfaa; }
+#tool-momo .dot-down { background: #ef4444; }
+#tool-momo .dot-flat { background: #9ca3af; }
+#tool-momo .dot-none { background: transparent; border: 1px solid #d1d5db; }
+#tool-momo .th-tag { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; margin-left: 4px; vertical-align: middle; }
+#tool-momo .th-tag.prev { background: rgba(91,164,232,0.15); color: #5ba4e8; }
+#tool-momo .th-tag.curr { background: rgba(62,207,170,0.15); color: #3ecfaa; }
+#tool-momo .tt-popup { position: fixed; z-index: 9999; background: rgba(14,22,34,0.95); color: var(--text); border: 1px solid var(--glass-border); padding: 9px 13px; border-radius: 10px; font-size: 12px; line-height: 1.7; pointer-events: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5); white-space: nowrap; display: none; min-width: 160px; backdrop-filter: blur(12px); }
+#tool-momo .tt-popup::before { content: ''; position: absolute; width: 8px; height: 8px; background: rgba(14,22,34,0.95); transform: rotate(45deg); }
+#tool-momo .tt-popup.dir-down::before { top: -4px; left: 50%; transform: translateX(-50%) rotate(45deg); }
+#tool-momo .tt-popup.dir-up::before { bottom: -4px; left: 50%; transform: translateX(-50%) rotate(45deg); }
+#tool-momo .tt-label { color: #9ca3af; font-size: 11px; }
+#tool-momo .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+#tool-momo .tt-change.up { color: #34d399; }
+#tool-momo .tt-change.down { color: #f87171; }
+#tool-momo .tt-change.flat { color: #9ca3af; }
+#tool-momo .empty-state { padding: 60px 24px; text-align: center; color: rgba(255,255,255,0.45); }
+#tool-momo .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+
+/* ============================================================
+   DASHBOARD STYLES
+============================================================ */
+.db-header {
+  background: rgba(8,20,28,0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--glass-border);
+  padding: 0 32px; height: 56px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.db-header-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--text); }
+.db-header-icon { width: 32px; height: 32px; background: linear-gradient(135deg,#5b6ef5,#8b5cf6); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 0 12px rgba(91,110,245,0.4); }
+.db-main { max-width: 1400px; margin: 0 auto; padding: 24px 24px 48px; }
+
+/* Upload area */
+.db-upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.db-upload-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 20px 24px; backdrop-filter: blur(12px); }
+.db-upload-card.shopee { border-top: 2px solid rgba(255,98,64,0.5); }
+.db-upload-card.momo { border-top: 2px solid rgba(255,77,106,0.5); }
+.db-card-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.db-dropzone {
+  border: 1px dashed var(--glass-border); border-radius: var(--radius-sm);
+  padding: 14px; display: flex; align-items: center; gap: 10px;
+  cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.02); min-height: 52px; position: relative;
+}
+.db-dropzone:hover { border-color: rgba(91,110,245,0.5); background: rgba(91,110,245,0.06); }
+.db-dropzone.has-file { border-color: var(--teal); border-style: solid; background: rgba(62,207,170,0.05); }
+.db-dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.db-upload-hint { font-size: 11px; color: var(--text3); margin-top: 8px; }
+
+/* Records list */
+.db-records-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 20px 24px; backdrop-filter: blur(12px); margin-bottom: 20px; }
+.db-records-title { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+.db-records-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.db-record-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 500;
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.05);
+  color: var(--text2);
+}
+.db-record-tag.shopee { background: rgba(255,98,64,0.1); color: var(--shopee); border-color: rgba(255,98,64,0.25); }
+.db-record-tag.momo { background: rgba(255,77,106,0.1); color: var(--momo); border-color: rgba(255,77,106,0.25); }
+.db-record-del { background: none; border: none; cursor: pointer; color: inherit; opacity: .5; font-size: 13px; padding: 0; line-height: 1; }
+.db-record-del:hover { opacity: 1; }
+.db-empty-records { font-size: 12px; color: var(--text3); padding: 8px 0; }
+
+/* Filter bar */
+.db-filter-bar { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 16px 24px; backdrop-filter: blur(12px); margin-bottom: 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.db-filter-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; white-space: nowrap; }
+.db-date-inputs { display: flex; align-items: center; gap: 8px; }
+.db-date-input { padding: 6px 10px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); font-size: 12px; font-family: inherit; background: rgba(255,255,255,0.05); color: var(--text); }
+.db-date-input:focus { outline: none; border-color: var(--teal); }
+.db-date-sep { color: var(--text3); font-size: 12px; }
+.db-apply-btn { padding: 7px 20px; border-radius: 20px; border: 1px solid var(--teal); background: rgba(62,207,170,0.12); color: var(--teal); font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer; transition: all .15s; }
+.db-apply-btn:hover { background: rgba(62,207,170,0.22); }
+.db-clear-btn { padding: 7px 16px; border-radius: 20px; border: 1px solid var(--glass-border); background: transparent; color: var(--text2); font-size: 12px; font-weight: 400; font-family: inherit; cursor: pointer; transition: all .15s; }
+.db-clear-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* Summary KPIs */
+.db-kpi-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+.db-kpi-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 16px 20px; backdrop-filter: blur(12px); }
+.db-kpi-platform { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+.db-kpi-platform.shopee { color: var(--shopee); }
+.db-kpi-platform.momo { color: var(--momo); }
+.db-kpi-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; font-weight: 400; }
+.db-kpi-val { font-size: 22px; font-weight: 400; color: var(--text); letter-spacing: -0.01em; }
+
+/* Main table */
+.db-table-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); backdrop-filter: blur(12px); overflow: hidden; }
+.db-table-toolbar { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.02); }
+.db-search { padding: 6px 12px; border: 1px solid var(--glass-border); border-radius: 20px; font-size: 12px; font-family: inherit; width: 220px; background: rgba(255,255,255,0.05); color: var(--text); }
+.db-search:focus { outline: none; border-color: var(--teal); }
+.db-dl-btn { margin-left: auto; padding: 6px 18px; border-radius: 20px; border: 1px solid var(--teal); background: rgba(62,207,170,0.1); color: var(--teal); font-family: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: all .2s; white-space: nowrap; }
+.db-dl-btn:hover { background: rgba(62,207,170,0.2); }
+.db-table-wrap { overflow-x: auto; max-height: 600px; overflow-y: auto; }
+#tool-dashboard table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#tool-dashboard thead { position: sticky; top: 0; z-index: 10; }
+#tool-dashboard thead tr.db-th-platform th { padding: 8px 12px 2px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; text-align: center; border-bottom: none; }
+#tool-dashboard thead tr.db-th-platform th.shopee-hd { background: rgba(255,98,64,0.08); color: var(--shopee); }
+#tool-dashboard thead tr.db-th-platform th.momo-hd { background: rgba(255,77,106,0.08); color: var(--momo); }
+#tool-dashboard thead tr.db-th-platform th.name-hd { background: rgba(255,255,255,0.03); }
+#tool-dashboard thead tr.db-th-cols th { padding: 6px 12px 8px; font-size: 11px; font-weight: 500; color: var(--text2); text-align: right; border-bottom: 1px solid rgba(255,255,255,0.07); white-space: nowrap; }
+#tool-dashboard thead tr.db-th-cols th.shopee-hd { background: rgba(255,98,64,0.05); }
+#tool-dashboard thead tr.db-th-cols th.momo-hd { background: rgba(255,77,106,0.05); }
+#tool-dashboard thead tr.db-th-cols th.name-hd { background: rgba(255,255,255,0.03); text-align: left; }
+#tool-dashboard tbody tr { border-bottom: 1px solid rgba(255,255,255,0.07); transition: background .13s; }
+#tool-dashboard tbody tr:last-child { border-bottom: none; }
+#tool-dashboard tbody tr:hover { background: rgba(255,255,255,0.05); }
+#tool-dashboard td { padding: 10px 12px; text-align: right; font-variant-numeric: tabular-nums; vertical-align: middle; color: rgba(255,255,255,0.82); }
+#tool-dashboard td.name-col { text-align: left; font-weight: 400; font-size: 12px; max-width: 320px; color: rgba(255,255,255,0.88); }
+#tool-dashboard td.shopee-col { background: rgba(255,98,64,0.03); }
+#tool-dashboard td.momo-col { background: rgba(255,77,106,0.03); }
+.db-no-data { text-align: center; color: var(--text3); padding: 60px 24px; font-size: 13px; }
+#s-tt-global {
+  display: none; position: fixed;
+  background: rgba(20,28,38,0.95); color: var(--text);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px; padding: 10px 13px;
+  font-size: 12px; white-space: nowrap; z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5); pointer-events: none; min-width: 180px;
+  backdrop-filter: blur(12px);
+}
+#s-tt-global::before {
+  content: ''; position: absolute; bottom: 100%; left: 16px;
+  border: 6px solid transparent; border-bottom-color: rgba(20,28,38,0.95);
+}
+</style>
+</head>
+<body>
+
+<!-- 側邊欄遮罩 -->
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<!-- 設定 Modal -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;z-index:800;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);">
+  <div style="background:#0f2030;border:1px solid rgba(255,255,255,0.15);border-radius:16px;padding:28px 24px;width:90%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.9);">⚙️ 設定</div>
+      <button onclick="closeSettings()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">Apps Script 網址</div>
+    <input id="settings-api-url" type="url" placeholder="https://script.google.com/macros/s/..."
+      style="width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:8px;font-size:13px;font-family:inherit;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.88);box-sizing:border-box;margin-bottom:12px;">
+    <button onclick="saveSettingsUrl()"
+      style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(62,207,170,0.5);background:rgba(62,207,170,0.15);color:#3ecfaa;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">
+      儲存
+    </button>
+    <div id="settings-save-msg" style="text-align:center;font-size:12px;color:rgba(62,207,170,0.8);margin-top:8px;min-height:18px;"></div>
+  </div>
+</div>
+
+<!-- 漢堡選單按鈕（手機版才顯示） -->
+<button id="menu-btn" onclick="toggleSidebar()"
+  style="display:none;position:fixed;top:10px;left:12px;z-index:600;
+         width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);
+         background:rgba(255,255,255,0.08);backdrop-filter:blur(12px);
+         cursor:pointer;align-items:center;justify-content:center;flex-direction:column;gap:5px;">
+  <span style="display:block;width:16px;height:1.5px;background:rgba(255,255,255,0.8);border-radius:2px;"></span>
+  <span style="display:block;width:16px;height:1.5px;background:rgba(255,255,255,0.8);border-radius:2px;"></span>
+  <span style="display:block;width:16px;height:1.5px;background:rgba(255,255,255,0.8);border-radius:2px;"></span>
+</button>
+
+<!-- 手機版設定按鈕 -->
+<button id="settings-btn" onclick="openSettings()"
+  style="display:none;position:fixed;top:10px;right:12px;z-index:600;
+         width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);
+         background:rgba(255,255,255,0.08);backdrop-filter:blur(12px);
+         cursor:pointer;align-items:center;justify-content:center;font-size:16px;">
+  ⚙️
+</button>
+
+<!-- 登入畫面 -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:#0e1a22;background-image:radial-gradient(ellipse 110% 70% at 0% 0%,#0a2233 0%,transparent 55%),radial-gradient(ellipse 90% 80% at 100% 0%,#0d2b2a 0%,transparent 55%),radial-gradient(ellipse 100% 60% at 50% 100%,#0a1f2e 0%,transparent 60%),radial-gradient(ellipse 70% 50% at 15% 60%,rgba(20,90,90,0.55) 0%,transparent 50%),radial-gradient(ellipse 60% 45% at 85% 40%,rgba(15,60,90,0.5) 0%,transparent 50%);">
+  <div style="background:rgba(255,255,255,0.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:40px 44px;width:400px;max-width:92vw;box-shadow:0 32px 80px rgba(0,0,0,0.5);">
+    <div style="text-align:center;margin-bottom:32px;">
+      <div style="font-size:36px;margin-bottom:12px;filter:drop-shadow(0 0 20px rgba(62,207,170,0.5));">📊</div>
+      <div style="font-size:18px;font-weight:400;color:rgba(255,255,255,0.92);letter-spacing:0.04em;">電商分析工具</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:6px;letter-spacing:0.06em;">LUMARK BRANDING</div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase;">電子郵件</label>
+      <input id="login-email" type="email" placeholder="your@email.com" onkeydown="loginKeydown(event)"
+        style="width:100%;padding:10px 14px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;outline:none;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.9);"
+        onfocus="this.style.borderColor='rgba(62,207,170,0.6)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase;">密碼</label>
+      <input id="login-password" type="password" placeholder="••••••••" onkeydown="loginKeydown(event)"
+        style="width:100%;padding:10px 14px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;outline:none;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.9);"
+        onfocus="this.style.borderColor='rgba(62,207,170,0.6)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+    </div>
+    <div style="text-align:right;margin-bottom:24px;">
+      <button onclick="doForgotPassword()" style="background:none;border:none;color:rgba(62,207,170,0.8);font-size:12px;cursor:pointer;font-family:inherit;">忘記密碼？</button>
+    </div>
+    <div id="login-error" style="color:#f07070;font-size:12px;margin-bottom:12px;text-align:center;min-height:18px;"></div>
+    <button id="login-btn" onclick="doLogin()"
+      style="width:100%;padding:12px;background:rgba(62,207,170,0.15);color:rgba(62,207,170,0.95);border:1px solid rgba(62,207,170,0.4);border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;letter-spacing:0.04em;transition:all .2s;"
+      onmouseover="this.style.background='rgba(62,207,170,0.25)'" onmouseout="this.style.background='rgba(62,207,170,0.15)'">
+      登入
+    </button>
+  </div>
+</div>
+
+<!-- 主工具 -->
+<div id="app-screen" style="display:none;width:100%;height:100%;">
+
+<!-- ============================================================
+     SIDEBAR
+============================================================ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">📊</div>
+    <div>
+      <div class="sidebar-logo-text">電商分析工具</div>
+      <div class="sidebar-logo-sub" id="user-email" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+    </div>
+    <button onclick="doLogout()" style="margin-left:auto;padding:4px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.45);font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0;transition:all .15s;" onmouseover="this.style.color='rgba(255,255,255,0.8)'" onmouseout="this.style.color='rgba(255,255,255,0.45)'">登出</button>
+  </div>
+
+  <div class="sidebar-nav" style="margin-top:8px;">
+    <button class="nav-item" id="nav-products" onclick="switchTool('products')">
+      <div class="nav-icon">🗂️</div>
+      <div class="nav-item-text">商品資料庫</div>
+    </button>
+    <button class="nav-item" id="nav-tracker" onclick="switchTool('tracker')">
+      <div class="nav-icon">🔗</div>
+      <div class="nav-item-text">賣場追蹤連結</div>
+    </button>
+    <button class="nav-item shopee" id="nav-shopee" onclick="switchTool('shopee')">
+      <div class="nav-icon">🦐</div>
+      <div class="nav-item-text">蝦皮資料分析</div>
+    </button>
+    <button class="nav-item momo" id="nav-momo" onclick="switchTool('momo')">
+      <div class="nav-icon">🛍️</div>
+      <div class="nav-item-text">Momo 資料分析</div>
+    </button>
+  </div>
+
+  <div class="sidebar-footer">
+    © Lumark Branding
+  </div>
+</nav>
+
+<!-- ============================================================
+     MAIN CONTENT
+============================================================ -->
+<div class="main-wrapper">
+
+  <!-- Welcome -->
+  <div class="tool-panel active" id="tool-welcome">
+    <div class="welcome-screen">
+      <div class="icon">📊</div>
+      <h2>歡迎使用電商分析工具</h2>
+      <p style="color:var(--text3);letter-spacing:0.04em;">請從左側選擇工具開始</p>
+    </div>
+  </div>
+
+
+  <!-- ============================================================
+       PRODUCT DATABASE (Google Drive / Sheets 版)
+  ============================================================ -->
+  <div class="tool-panel" id="tool-products">
+    <header class="db-header">
+      <div class="db-header-brand">
+        <div class="db-header-icon">🗂️</div>
+        <div>
+          <div style="font-size:15px;font-weight:700">商品資料庫</div>
+          <div style="font-size:12px;color:var(--text3)" id="pd-header-sub">從 Google Drive 自動讀取</div>
+        </div>
+      </div>
+      <!-- Apps Script 設定區 -->
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div id="pd-api-setup" style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;color:var(--text3);">Apps Script 網址</span>
+          <input id="pd-api-url" type="text" placeholder="貼上 Web App 部署網址…"
+            style="width:340px;padding:6px 10px;border:1px solid var(--glass-border);border-radius:var(--radius-sm);font-size:11px;font-family:inherit;color:rgba(255,255,255,0.88);background:rgba(255,255,255,0.07);"
+            value="">
+          <button onclick="pdSaveApiUrl()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:#6366f1;color:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">儲存</button>
+        </div>
+        <span id="pd-api-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+    </header>
+
+    <div class="db-main">
+
+      <!-- 平台切換 Tabs -->
+      <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:16px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;box-shadow:var(--shadow);">
+        <button id="pd-tab-shopee" onclick="pdSwitchTab('shopee')" style="padding:13px 24px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--shopee);border-bottom:3px solid var(--shopee);margin-bottom:-2px;">🦐 蝦皮</button>
+        <button id="pd-tab-momo"   onclick="pdSwitchTab('momo')"   style="padding:13px 24px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--text2);border-bottom:3px solid transparent;margin-bottom:-2px;">🛍️ Momo</button>
+        <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding-right:16px;">
+          <button onclick="pdInit()" style="padding:5px 14px;border-radius:20px;border:1px solid var(--border-md);background:var(--surface);color:var(--text2);font-size:11px;cursor:pointer;font-family:inherit;">🔄 重新載入廠商清單</button>
+        </div>
+      </div>
+
+      <!-- 廠商 + 日期選擇列 -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin-bottom:16px;box-shadow:var(--shadow);display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+
+        <!-- 廠商選擇 -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">廠商</span>
+          <div id="pd-client-list" style="display:flex;flex-wrap:wrap;gap:6px;min-width:200px;">
+            <span style="font-size:12px;color:var(--text3);">載入中…</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:40px;background:var(--border);flex-shrink:0;"></div>
+
+        <!-- 日期選擇 -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">日期</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="date" id="pd-date-select" class="db-date-input" style="width:160px;" onchange="pdOnDateChange()">
+            <span id="pd-date-hint" style="font-size:11px;color:var(--text3);"></span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:40px;background:var(--border);flex-shrink:0;"></div>
+
+        <!-- 日期區間（變價紀錄用） -->
+        <div id="pd-range-wrap" style="display:none;flex-direction:column;gap:4px;">
+          <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">日期區間</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input type="date" class="db-date-input" id="pd-date-from">
+            <span style="color:var(--text3);font-size:12px;">—</span>
+            <input type="date" class="db-date-input" id="pd-date-to">
+            <button class="db-apply-btn" onclick="pdChartMode==='table'?pdRenderPriceTable():pdRenderPriceChart()">套用</button>
+          </div>
+        </div>
+
+        <!-- 狀態訊息 -->
+        <span id="pd-filter-info" style="font-size:11px;color:var(--text3);margin-left:auto;"></span>
+      </div>
+
+      <!-- 資料載入狀態提示 -->
+      <div id="pd-loading-bar" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 24px;margin-bottom:16px;box-shadow:var(--shadow);display:none;align-items:center;gap:12px;">
+        <div style="width:18px;height:18px;border:2px solid #6366f1;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;"></div>
+        <span id="pd-loading-msg" style="font-size:13px;color:var(--text2);">載入中…</span>
+      </div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}
+/* mobile-client-select 預設隱藏 */
+.mobile-client-select {
+  display: none;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.88);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.mobile-client-select option { background: #0f2030; color: rgba(255,255,255,0.88); }
+
+/* mobile-client-select 預設隱藏（電腦版） */
+.mobile-client-select {
+  display: none;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.88);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.mobile-client-select option { background: #0f2030; color: rgba(255,255,255,0.88); }
+
+/* ============================================================
+   RESPONSIVE — 手機版
+============================================================ */
+@media (max-width: 768px) {
+
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    width: 260px;
+    z-index: 500;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  #sidebar-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 499;
+    backdrop-filter: blur(2px);
+  }
+  #sidebar-overlay.show { display: block; }
+
+  .main-wrapper { margin-left: 0 !important; width: 100%; }
+
+  #menu-btn { display: flex !important; }
+  #settings-btn { display: flex !important; }
+
+  /* 手機廠商下拉選單 */
+  .mobile-client-select { display: block !important; }
+  #pd-client-list > button, #momo-client-list > button,
+  #shopee-client-list > button, #tracker-client-list > button { display: none !important; }
+  #pd-client-list > span:not(.mobile-client-select),
+  #momo-client-list > span:not(.mobile-client-select),
+  #shopee-client-list > span:not(.mobile-client-select),
+  #tracker-client-list > span:not(.mobile-client-select) { display: none !important; }
+
+  /* 蝦皮/Momo tab 保持左右並排 */
+  #tool-products > div.db-main > div:first-child {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+  }
+  #pd-tab-shopee, #pd-tab-momo {
+    padding: 11px 16px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+  }
+  /* 重新載入按鈕在手機隱藏 */
+  #pd-tab-shopee ~ div { display: none !important; }
+
+  /* Header */
+  .db-header,
+  #tool-shopee .page-header,
+  #tool-momo .header {
+    padding: 0 16px 0 56px !important;
+    height: 52px;
+  }
+
+  /* 隱藏 Apps Script 網址欄（太長） */
+  #pd-api-setup, #momo-api-url, #shopee-api-url,
+  #tracker-api-url, #momo-api-status, #shopee-api-status,
+  #tracker-api-status { display: none !important; }
+
+  /* 隱藏右上角儲存按鈕標籤 */
+  .db-header > div:last-child > button,
+  #tool-momo .header > div:last-child > button,
+  #tool-shopee .page-header > div:last-child > button { display: none !important; }
+
+  /* 內容 padding */
+  .db-main,
+  #tool-shopee .container,
+  #tool-momo .main { padding: 14px 12px 48px; }
+
+  /* 廠商按鈕列：橫捲 */
+  #pd-client-list, #tracker-client-list,
+  #momo-client-list, #shopee-client-list {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  /* 篩選卡片垂直排列 */
+  .db-main > div:first-child,
+  #tool-momo .main > div:first-child,
+  #tool-shopee .container > div:first-child {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  /* 隱藏垂直分隔線 */
+  [style*="width:1px;height:40px"] { display: none !important; }
+
+  /* 日期輸入縮小 */
+  .db-date-input, input[type="date"] { width: 130px !important; }
+
+  /* KPI 2欄 */
+  .db-kpi-row, #shopee-kpi-row, #momo-kpi-row {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* 工具列換行 */
+  .db-table-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .db-search, #momo-search, #shopee-search,
+  #tracker-table-search, #pd-search {
+    width: 100% !important;
+  }
+  .db-dl-btn, #momo-dl-btn, #shopee-dl-btn {
+    margin-left: 0 !important;
+  }
+
+  /* 按鈕群組靠左 */
+  .db-table-toolbar > div[style*="margin-left:auto"] {
+    margin-left: 0 !important;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* 表格最大高度 */
+  .db-table-wrap,
+  [style*="overflow-x:auto;max-height:600px"],
+  [style*="overflow-x:auto;max-height:580px"] {
+    max-height: 400px !important;
+  }
+
+  /* 商品資料庫 tab 切換按鈕 */
+  #pd-view-table-btn, #pd-view-chart-btn { font-size: 11px; padding: 4px 10px; }
+
+  /* Momo/Shopee 篩選列特定處理 */
+  #tool-momo .main > div:first-child,
+  #tool-shopee .container > div:first-child {
+    padding: 14px 16px !important;
+  }
+
+  /* 日期區間兩欄 */
+  #shopee-date-from, #shopee-date-to,
+  #shopee-prev-from, #shopee-prev-to,
+  #momo-date-from, #momo-date-to,
+  #momo-prev-from, #momo-prev-to { width: 130px !important; }
+
+  /* header sub text hide */
+  .header-sub, .db-header > div:first-child > div > div:last-child { display: none; }
+}
+
+
+  /* 手機版廠商改下拉選單 */
+  .mobile-client-select {
+    display: none;
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.07);
+    color: rgba(255,255,255,0.88);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  .mobile-client-select option {
+    background: #0f2030;
+    color: rgba(255,255,255,0.88);
+  }
+
+
+
+@media (max-width: 480px) {
+  .db-kpi-row, #shopee-kpi-row, #momo-kpi-row {
+    grid-template-columns: 1fr !important;
+  }
+  .db-kpi-val { font-size: 18px !important; }
+  .db-main,
+  #tool-shopee .container,
+  #tool-momo .main { padding: 10px 8px 40px; }
+  #shopee-date-from, #shopee-date-to,
+  #shopee-prev-from, #shopee-prev-to,
+  #momo-date-from, #momo-date-to,
+  #momo-prev-from, #momo-prev-to { width: 115px !important; }
+}
+</style>
+
+      <!-- 表格工具列 + 表格 -->
+      <div class="db-table-card">
+        <div class="db-table-toolbar">
+          <input type="text" class="db-search" placeholder="🔍 搜尋商品名稱…" id="pd-search" oninput="pdOnSearch(this.value)">
+          <span style="font-size:12px;color:var(--text3)" id="pd-row-count"></span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" id="pd-price-change-filter" onchange="pdOnSearch(document.getElementById('pd-search').value)" style="width:14px;height:14px;cursor:pointer;">
+            只顯示價格異動
+          </label>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            <button id="pd-view-table-btn" onclick="pdSwitchView('table')" style="padding:5px 16px;border-radius:20px;border:1px solid var(--shopee);background:rgba(255,98,64,0.15);color:var(--shopee);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">📋 商品列表</button>
+            <button id="pd-view-chart-btn" onclick="pdSwitchView('chart')" style="padding:5px 16px;border-radius:20px;border:1px solid var(--glass-border);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">📈 變價紀錄</button>
+            <button class="db-dl-btn" style="margin-left:6px;" onclick="pdDownload()">⬇ 下載 Excel</button>
+          </div>
+        </div>
+
+        <!-- 商品列表 view -->
+        <div id="pd-view-table">
+          <div class="db-table-wrap" style="overflow-x:auto;max-height:580px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead id="pd-thead"></thead>
+              <tbody id="pd-tbody">
+                <tr><td style="padding:60px;text-align:center;color:var(--text3);">請先設定 Apps Script 網址，選擇廠商與日期</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 變價紀錄 view -->
+        <div id="pd-view-chart" style="display:none;">
+          <!-- 子模式切換列 -->
+          <div style="padding:14px 24px 0;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);background:var(--surface2);">
+            <button id="pd-chart-mode-table" onclick="pdSwitchChartMode('table')"
+              style="padding:7px 18px;border-radius:20px 20px 0 0;border:1px solid var(--border);border-bottom:none;background:white;color:#6366f1;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:-1px;position:relative;z-index:1;">
+              📋 價格表格
+            </button>
+            <button id="pd-chart-mode-chart" onclick="pdSwitchChartMode('chart')"
+              style="padding:7px 18px;border-radius:20px 20px 0 0;border:1px solid transparent;border-bottom:none;background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:-1px;">
+              📈 折線圖
+            </button>
+            <span style="font-size:11px;color:var(--text3);margin-left:8px;">勾選「只顯示價格異動」可濾掉未變動商品</span>
+          </div>
+
+          <!-- 價格表格（預設顯示） -->
+          <div id="pd-chartmode-table" style="display:block;">
+            <div style="overflow-x:auto;max-height:580px;overflow-y:auto;">
+              <table id="pd-price-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead id="pd-price-thead"></thead>
+                <tbody id="pd-price-tbody">
+                  <tr><td style="padding:60px;text-align:center;color:var(--text3);">請設定日期區間並套用</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 折線圖（預設隱藏） -->
+          <div id="pd-chartmode-chart" style="display:none;padding:20px 24px;">
+            <div id="pd-price-chart-wrap" style="position:relative;height:400px;">
+              <canvas id="pd-price-chart"></canvas>
+            </div>
+            <div id="pd-price-chart-empty" style="display:none;padding:60px;text-align:center;color:var(--text3);">請選廠商並設定日期區間</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TRACKER
+  ============================================================ -->
+  <div class="tool-panel" id="tool-tracker">
+    <header class="db-header">
+      <div class="db-header-brand">
+        <div class="db-header-icon">🔗</div>
+        <div>
+          <div style="font-size:15px;font-weight:500;">競品價格追蹤</div>
+          <div style="font-size:12px;color:var(--text3)">追蹤 Momo 競品價格，每天早上 9 點自動更新</div>
+        </div>
+      </div>
+      <!-- Apps Script 設定 -->
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text3);">Apps Script 網址</span>
+        <input id="tracker-api-url" type="text" placeholder="貼上 Web App 部署網址…"
+          style="width:300px;padding:6px 10px;border:1px solid var(--glass-border);border-radius:var(--radius-sm);font-size:11px;font-family:inherit;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.88);">
+        <button onclick="trackerSaveApiUrl()" style="padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--teal);background:rgba(62,207,170,0.12);color:var(--teal);font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;">儲存</button>
+        <span id="tracker-api-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+    </header>
+
+    <div class="db-main">
+
+      <!-- 廠商選擇 + 狀態列 -->
+      <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-lg);padding:16px 24px;margin-bottom:16px;backdrop-filter:blur(12px);display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">廠商</span>
+          <div id="tracker-client-list" style="display:flex;flex-wrap:wrap;gap:6px;">
+            <span style="font-size:12px;color:var(--text3);">載入中…</span>
+          </div>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+          <span id="tracker-status-msg" style="font-size:11px;color:var(--text3);"></span>
+          <button onclick="trackerFetchNow()" id="tracker-fetch-btn"
+            style="display:none;padding:6px 16px;border-radius:20px;border:1px solid var(--teal);background:rgba(62,207,170,0.12);color:var(--teal);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">
+            🔄 立即更新價格
+          </button>
+        </div>
+      </div>
+
+      <!-- 競品最新價格表格 -->
+      <div class="db-table-card" style="margin-bottom:20px;">
+        <div class="db-table-toolbar">
+          <input type="text" class="db-search" id="tracker-table-search" placeholder="🔍 搜尋商品名稱…" oninput="trackerFilterTable(this.value)" style="width:280px;">
+          <span id="tracker-table-count" style="font-size:12px;color:var(--text3);"></span>
+        </div>
+        <div id="tracker-cards" style="overflow-x:auto;max-height:520px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- 歷史圖表區 -->
+      <div class="db-table-card" id="tracker-chart-section" style="display:none;">
+        <div class="db-table-toolbar">
+          <input type="text" class="db-search" id="tracker-search" placeholder="🔍 搜尋商品名稱篩選折線圖…" oninput="trackerRenderChart()" style="width:300px;">
+          <span style="font-size:11px;color:var(--text2);margin-left:8px;" id="tracker-chart-hint"></span>
+        </div>
+        <div style="padding:20px 24px;">
+          <div style="position:relative;height:400px;">
+            <canvas id="tracker-chart-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================
+       DASHBOARD
+  ============================================================ -->
+  <div class="tool-panel" id="tool-dashboard">
+    <header class="db-header">
+      <div class="db-header-brand">
+        <div class="db-header-icon">📈</div>
+        <div>
+          <div style="font-size:15px;font-weight:700">跨平台銷售 Dashboard</div>
+          <div style="font-size:12px;color:var(--text3)">蝦皮 × Momo 商品對比</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3)">上傳資料後選擇日期區間查看</div>
+    </header>
+
+    <div class="db-main">
+
+      <!-- Upload -->
+      <div class="db-upload-card" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-bottom:20px;box-shadow:var(--shadow);border-top:4px solid #6366f1;">
+        <div class="db-card-title" style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+          <span>📁</span> 上傳資料（可多選、可混合類型）
+        </div>
+        <div class="db-dropzone" id="db-zone-all">
+          <input type="file" accept=".xlsx,.xls" multiple onchange="dbHandleUpload(event)">
+          <span style="font-size:24px">📄</span>
+          <div>
+            <div style="font-size:13px;color:var(--text);font-weight:500;">點擊上傳或拖曳檔案</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">檔名格式：<b>客戶_平台_日期.xlsx</b>　例：金大器_蝦皮_20260524.xlsx　金大器_momo_20260524.xlsx　金大器_momoads_20260524.xlsx</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Records -->
+      <div class="db-records-card">
+        <div class="db-records-title">
+          <span>已載入資料</span>
+          <button onclick="dbClearAll()" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;">清除全部</button>
+        </div>
+        <div class="db-records-list" id="db-records-list">
+          <div class="db-empty-records">尚未上傳任何資料</div>
+        </div>
+      </div>
+
+      <!-- Filter -->
+      <div class="db-filter-bar">
+        <span class="db-filter-label">日期區間</span>
+        <div class="db-date-inputs">
+          <input type="date" class="db-date-input" id="db-date-from">
+          <span class="db-date-sep">—</span>
+          <input type="date" class="db-date-input" id="db-date-to">
+        </div>
+        <div id="db-client-filter-wrap" style="display:none;align-items:center;gap:8px;">
+          <span class="db-filter-label">客戶</span>
+          <select id="db-client-select" class="db-date-input" style="width:120px;">
+            <option value="">全部客戶</option>
+          </select>
+        </div>
+        <button class="db-apply-btn" onclick="dbRender()">套用</button>
+        <button class="db-clear-btn" onclick="dbResetFilter()">重設</button>
+        <span style="font-size:11px;color:var(--text3);margin-left:4px" id="db-filter-info"></span>
+      </div>
+
+      <!-- KPI row -->
+      <div class="db-kpi-row" id="db-kpi-row" style="grid-template-columns:repeat(6,1fr);">
+        <div class="db-kpi-card"><div class="db-kpi-platform shopee">蝦皮</div><div class="db-kpi-label">總銷售額</div><div class="db-kpi-val" id="db-k-s-sales">—</div></div>
+        <div class="db-kpi-card"><div class="db-kpi-platform shopee">蝦皮</div><div class="db-kpi-label">總訂單量</div><div class="db-kpi-val" id="db-k-s-orders">—</div></div>
+        <div class="db-kpi-card"><div class="db-kpi-platform momo">Momo</div><div class="db-kpi-label">總銷售額</div><div class="db-kpi-val" id="db-k-m-sales">—</div></div>
+        <div class="db-kpi-card"><div class="db-kpi-platform momo">Momo</div><div class="db-kpi-label">總訂購數</div><div class="db-kpi-val" id="db-k-m-orders">—</div></div>
+        <div class="db-kpi-card"><div class="db-kpi-platform momo">Momo 廣告</div><div class="db-kpi-label">廣告收入</div><div class="db-kpi-val" id="db-k-ma-sales">—</div></div>
+        <div class="db-kpi-card"><div class="db-kpi-platform momo">Momo 廣告</div><div class="db-kpi-label">廣告支出</div><div class="db-kpi-val" id="db-k-ma-spend">—</div></div>
+      </div>
+
+      <!-- Table -->
+      <div class="db-table-card">
+        <div class="db-table-toolbar">
+          <input type="text" class="db-search" placeholder="🔍 搜尋商品名稱…" oninput="dbFilterTable(this.value)">
+          <span style="font-size:12px;color:var(--text3)" id="db-row-count"></span>
+          <button class="db-dl-btn" onclick="dbDownload()">⬇ 下載 Excel</button>
+        </div>
+        <div class="db-table-wrap">
+          <table id="db-table">
+            <thead>
+              <tr class="db-th-platform">
+                <th class="name-hd" rowspan="2" style="vertical-align:middle;text-align:left;padding:8px 12px;background:var(--surface2);border-bottom:2px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);">商品名稱</th>
+                <th class="shopee-hd" colspan="6">🦐 蝦皮</th>
+                <th class="momo-hd" colspan="9">🛍️ Momo</th>
+              </tr>
+              <tr class="db-th-cols">
+                <th class="shopee-hd">訂單量</th>
+                <th class="shopee-hd">銷售額</th>
+                <th class="shopee-hd">售價</th>
+                <th class="shopee-hd">曝光</th>
+                <th class="shopee-hd">點擊</th>
+                <th class="shopee-hd">轉換率</th>
+                <th class="momo-hd">售價</th>
+                <th class="momo-hd">庫存</th>
+                <th class="momo-hd">訂購數</th>
+                <th class="momo-hd">瀏覽量</th>
+                <th class="momo-hd">訂購金額</th>
+                <th class="momo-hd">曝光數</th>
+                <th class="momo-hd">點擊數</th>
+                <th class="momo-hd">廣告收入</th>
+                <th class="momo-hd">廣告支出</th>
+              </tr>
+            </thead>
+            <tbody id="db-tbody">
+              <tr><td colspan="16" class="db-no-data">請先上傳資料</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SHOPEE TOOL (Google Drive 版)
+  ============================================================ -->
+  <div class="tool-panel" id="tool-shopee">
+    <div id="shopee-tt" style="display:none;position:fixed;z-index:9999;background:rgba(14,22,34,0.96);color:rgba(255,255,255,0.88);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.8;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.5);white-space:nowrap;backdrop-filter:blur(12px);"></div>
+
+    <header class="page-header">
+      <div class="logo">
+        <div class="logo-icon">🦐</div>
+        蝦皮資料分析
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text3);">Apps Script 網址</span>
+        <input id="shopee-api-url" type="text" placeholder="貼上 Web App 部署網址…"
+          style="width:300px;padding:6px 10px;border:1px solid var(--glass-border);border-radius:var(--radius-sm);font-size:11px;font-family:inherit;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.88);">
+        <button onclick="shopeeSaveApiUrl()" style="padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--shopee);background:rgba(255,98,64,0.12);color:var(--shopee);font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;">儲存</button>
+        <span id="shopee-api-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+    </header>
+
+    <div class="container">
+      <!-- 廠商選擇 + 日期區間 -->
+      <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-lg);padding:16px 24px;margin-bottom:16px;backdrop-filter:blur(12px);display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
+
+        <!-- 廠商 -->
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">廠商</span>
+          <div id="shopee-client-list" style="display:flex;flex-wrap:wrap;gap:6px;">
+            <span style="font-size:12px;color:var(--text3);">載入中…</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:40px;background:var(--border);flex-shrink:0;margin-top:20px;"></div>
+
+        <!-- 日期區間 -->
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">本期區間</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="date" id="shopee-date-from" class="db-date-input" style="width:148px;">
+              <span style="color:var(--text3);font-size:12px;">—</span>
+              <input type="date" id="shopee-date-to" class="db-date-input" style="width:148px;">
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">前期區間 <span style="font-weight:400;text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.25);">（選填，滑鼠移至數字對比）</span></span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="date" id="shopee-prev-from" class="db-date-input" style="width:148px;">
+              <span style="color:var(--text3);font-size:12px;">—</span>
+              <input type="date" id="shopee-prev-to" class="db-date-input" style="width:148px;">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button onclick="shopeeLoadData()" style="padding:6px 20px;border-radius:20px;border:1px solid var(--shopee);background:rgba(255,98,64,0.12);color:var(--shopee);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">套用</button>
+            <div id="shopee-date-hint" style="font-size:11px;color:var(--text3);"></div>
+          </div>
+        </div>
+
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;margin-top:20px;">
+          <span id="shopee-status-msg" style="font-size:11px;color:var(--text3);"></span>
+          <button onclick="shopeeDownload()" id="shopee-dl-btn" style="display:none;padding:6px 16px;border-radius:20px;border:1px solid var(--shopee);background:rgba(255,98,64,0.1);color:var(--shopee);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">⬇ 下載 Excel</button>
+        </div>
+      </div>
+
+      <!-- KPI 列 -->
+      <div class="db-kpi-row" id="shopee-kpi-row" style="display:none;margin-bottom:16px;">
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">訂單量</div>
+          <div class="db-kpi-val" id="shopee-kpi-orders" style="color:var(--shopee)">—</div>
+        </div>
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">銷售額</div>
+          <div class="db-kpi-val" id="shopee-kpi-sales" style="color:var(--shopee)">—</div>
+        </div>
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">曝光</div>
+          <div class="db-kpi-val" id="shopee-kpi-impr" style="color:var(--text)">—</div>
+        </div>
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">點擊</div>
+          <div class="db-kpi-val" id="shopee-kpi-clicks" style="color:var(--text)">—</div>
+        </div>
+      </div>
+
+      <!-- 表格 -->
+      <div class="db-table-card">
+        <div class="db-table-toolbar">
+          <input type="text" class="db-search" id="shopee-search" placeholder="🔍 搜尋商品名稱…" oninput="shopeeFilterTable(this.value)" style="width:280px;">
+          <span id="shopee-row-count" style="font-size:12px;color:var(--text3);"></span>
+        </div>
+        <div style="overflow-x:auto;max-height:600px;overflow-y:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr id="shopee-thead-row"></tr></thead>
+            <tbody id="shopee-tbody">
+              <tr><td colspan="7" style="padding:60px;text-align:center;color:var(--text3);">請選擇廠商與日期區間</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MOMO TOOL (Google Drive 版)
+  ============================================================ -->
+  <div class="tool-panel" id="tool-momo">
+    <div id="momo-tt" style="display:none;position:fixed;z-index:9999;background:rgba(14,22,34,0.96);color:rgba(255,255,255,0.88);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.8;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.5);white-space:nowrap;min-width:160px;backdrop-filter:blur(12px);"></div>
+    <header class="header">
+      <div class="header-brand">
+        <div class="header-icon">🛍️</div>
+        <div>
+          <div class="header-title">Momo 資料分析</div>
+          <div class="header-sub">從 Google Drive 自動讀取</div>
+        </div>
+      </div>
+      <!-- Apps Script 設定 -->
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text3);">Apps Script 網址</span>
+        <input id="momo-api-url" type="text" placeholder="貼上 Web App 部署網址…"
+          style="width:300px;padding:6px 10px;border:1px solid var(--glass-border);border-radius:var(--radius-sm);font-size:11px;font-family:inherit;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.88);">
+        <button onclick="momoSaveApiUrl()" style="padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--teal);background:rgba(62,207,170,0.12);color:var(--teal);font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;">儲存</button>
+        <span id="momo-api-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+    </header>
+
+    <div class="main">
+      <!-- 廠商選擇 + 日期區間 -->
+      <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-lg);padding:16px 24px;margin-bottom:16px;backdrop-filter:blur(12px);display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
+
+        <!-- 廠商 -->
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">廠商</span>
+          <div id="momo-client-list" style="display:flex;flex-wrap:wrap;gap:6px;">
+            <span style="font-size:12px;color:var(--text3);">載入中…</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:40px;background:var(--border);flex-shrink:0;margin-top:20px;"></div>
+
+        <!-- 日期區間 -->
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">本期區間</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="date" id="momo-date-from" class="db-date-input" style="width:148px;" onchange="momoOnDateChange()">
+              <span style="color:var(--text3);font-size:12px;">—</span>
+              <input type="date" id="momo-date-to" class="db-date-input" style="width:148px;" onchange="momoOnDateChange()">
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">前期區間 <span style="font-weight:400;text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.25);">（選填，滑鼠移至數字對比）</span></span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="date" id="momo-prev-from" class="db-date-input" style="width:148px;">
+              <span style="color:var(--text3);font-size:12px;">—</span>
+              <input type="date" id="momo-prev-to" class="db-date-input" style="width:148px;">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button onclick="momoLoadData()" style="padding:6px 20px;border-radius:20px;border:1px solid var(--teal);background:rgba(62,207,170,0.12);color:var(--teal);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">套用</button>
+            <div id="momo-date-hint" style="font-size:11px;color:var(--text3);"></div>
+          </div>
+        </div>
+
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;margin-top:20px;">
+          <span id="momo-status-msg" style="font-size:11px;color:var(--text3);"></span>
+          <button onclick="momoDownload()" id="momo-dl-btn" style="display:none;padding:6px 16px;border-radius:20px;border:1px solid var(--teal);background:rgba(62,207,170,0.1);color:var(--teal);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">⬇ 下載 Excel</button>
+        </div>
+      </div>
+
+      <!-- KPI 列 -->
+      <div class="db-kpi-row" id="momo-kpi-row" style="display:none;margin-bottom:16px;">
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">訂購數</div>
+          <div class="db-kpi-val" id="momo-kpi-orders" style="color:var(--teal)">—</div>
+        </div>
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">訂購金額</div>
+          <div class="db-kpi-val" id="momo-kpi-sales" style="color:var(--teal)">—</div>
+        </div>
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">廣告收入</div>
+          <div class="db-kpi-val" id="momo-kpi-ad-sales" style="color:var(--blue)">—</div>
+        </div>
+        <div class="db-kpi-card">
+          <div class="db-kpi-label">廣告支出</div>
+          <div class="db-kpi-val" id="momo-kpi-ad-spend" style="color:var(--orange)">—</div>
+        </div>
+      </div>
+
+      <!-- 表格 -->
+      <div class="db-table-card">
+        <div class="db-table-toolbar">
+          <input type="text" class="db-search" id="momo-search" placeholder="🔍 搜尋商品名稱…" oninput="momoFilterTable(this.value)" style="width:280px;">
+          <span id="momo-row-count" style="font-size:12px;color:var(--text3);"></span>
+
+        </div>
+        <div style="overflow-x:auto;max-height:600px;overflow-y:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;" id="momo-table">
+            <thead id="momo-thead">
+              <tr id="momo-thead-row"></tr>
+            </thead>
+            <tbody id="momo-tbody">
+              <tr><td colspan="11" style="padding:60px;text-align:center;color:var(--text3);">請選擇廠商與日期區間</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end main-wrapper -->
+
+<!-- ============================================================
+     SIDEBAR SWITCH SCRIPT
+============================================================ -->
+<script>
+function switchTool(tool) {
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const navEl = document.getElementById('nav-' + tool);
+  if (navEl) {
+    navEl.classList.add('active');
+    if (tool === 'dashboard') navEl.style.cssText = 'background:rgba(91,110,245,0.12);color:#8b8ff5;font-weight:600;border:1px solid rgba(91,110,245,0.2);border-radius:8px;';
+  }
+  document.querySelectorAll('.tool-panel').forEach(el => el.classList.remove('active'));
+  document.getElementById('tool-' + tool).classList.add('active');
+  // Dashboard 切換時自動更新顯示
+  if (tool === 'products')  { pdInit(); }
+  if (tool === 'tracker')   { trackerInit(); }
+}
+
+// ============================================================
+// TRACKER JS - 競品價格追蹤（Google Drive 版）
+// ============================================================
+let trackerApiUrl = '';
+let trackerCurrentClient = null;
+let trackerClients = [];
+let trackerData = null;
+let trackerPriceChartInstance = null;
+
+try { trackerApiUrl = localStorage.getItem('tracker_api_url') || ''; } catch(e) {}
+
+function trackerSaveApiUrl() {
+  const v = (document.getElementById('tracker-api-url').value || '').trim();
+  if (!v) { alert('請輸入 Apps Script Web App 網址'); return; }
+  trackerApiUrl = v;
+  try { localStorage.setItem('tracker_api_url', v); } catch(e) {}
+  document.getElementById('tracker-api-status').textContent = '✅ 已儲存';
+  setTimeout(() => document.getElementById('tracker-api-status').textContent = '', 2000);
+  trackerInit();
+}
+
+async function trackerCallApi(params) {
+  const url = trackerApiUrl + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// ============================================================
+// Tracker: 初始化 → 載入廠商清單（共用 pdClients）
+// ============================================================
+async function trackerInit() {
+  const urlInput = document.getElementById('tracker-api-url');
+  if (urlInput && trackerApiUrl) urlInput.value = trackerApiUrl;
+
+  // 優先使用商品資料庫已載入的廠商清單
+  if (pdClients && pdClients.length) {
+    trackerClients = pdClients;
+    trackerRenderClientList();
+    return;
+  }
+  // 否則自己載入
+  if (!trackerApiUrl) {
+    trackerSetStatus('請先輸入並儲存 Apps Script 網址');
+    return;
+  }
+  trackerSetStatus('載入廠商清單…');
+  try {
+    const data = await trackerCallApi({ action: 'getClients' });
+    trackerClients = data.clients || [];
+    trackerRenderClientList();
+    trackerSetStatus('');
+  } catch(e) {
+    trackerSetStatus('❌ 載入失敗：' + e.message);
+  }
+}
+
+function trackerSetStatus(msg) {
+  const el = document.getElementById('tracker-status-msg');
+  if (el) el.textContent = msg;
+}
+
+function trackerRenderClientList() {
+  const wrap = document.getElementById('tracker-client-list');
+  if (!wrap) return;
+
+  // 只顯示有 momo 標籤的廠商
+  const filtered = trackerClients.filter(c => c.platforms && c.platforms.momo);
+
+  if (!filtered.length) {
+    wrap.innerHTML = '<span style="font-size:12px;color:var(--text3);">尚無廠商</span>';
+    return;
+  }
+  wrap.innerHTML = filtered.map(c => {
+    const isActive = c.name === trackerCurrentClient;
+    return `<button onclick="trackerSelectClient('${c.name}')"
+      style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:${isActive?'600':'400'};cursor:pointer;font-family:inherit;
+             border:1px solid ${isActive?'var(--teal)':'var(--glass-border)'};
+             background:${isActive?'rgba(62,207,170,0.12)':'transparent'};
+             color:${isActive?'var(--teal)':'var(--text2)'};transition:all .15s;">
+      ${c.name}
+    </button>`;
+  }).join('') + `<select class="mobile-client-select" onchange="trackerSelectClient(this.value)">
+    <option value="">請選擇廠商</option>
+    ${filtered.map(c => `<option value="${c.name}" ${c.name===trackerCurrentClient?'selected':''}>${c.name}</option>`).join('')}
+  </select>`;
+}
+
+async function trackerSelectClient(name) {
+  trackerCurrentClient = name;
+  trackerRenderClientList();
+  trackerData = null;
+  document.getElementById('tracker-cards').innerHTML = '';
+  document.getElementById('tracker-chart-section').style.display = 'none';
+
+  if (!trackerApiUrl) { trackerSetStatus('請先設定 Apps Script 網址'); return; }
+
+  trackerSetStatus('載入競品資料…');
+  document.getElementById('tracker-fetch-btn').style.display = 'none';
+
+  try {
+    // 同時取最新價格清單 + 歷史
+    const [prodData, histData] = await Promise.all([
+      trackerCallApi({ action: 'getTrackerProducts', client: name }),
+      trackerCallApi({ action: 'getTrackerHistory',  client: name }),
+    ]);
+
+    const products = prodData.products || [];
+    const history  = histData.history  || [];
+    const productNames = histData.products || [];
+
+    // 建立 trackerData 供折線圖用
+    if (history.length && productNames.length) {
+      trackerData = {
+        dates: history.map(h => h.date),
+        products: productNames.map(pName => ({
+          name: pName,
+          prices: history.map(h => h.prices[pName] ?? null),
+        })),
+      };
+    }
+
+    trackerRenderCards(products);
+    if (trackerData) {
+      document.getElementById('tracker-chart-section').style.display = 'block';
+      document.getElementById('tracker-chart-hint').textContent =
+        `共 ${history.length} 天歷史紀錄`;
+      trackerRenderChart();
+    }
+
+    const lastUpdate = products[0]?.updatedAt || '—';
+    trackerSetStatus(`上次更新：${lastUpdate}`);
+    document.getElementById('tracker-fetch-btn').style.display = 'inline-block';
+
+  } catch(e) {
+    trackerSetStatus('❌ 載入失敗：' + e.message);
+  }
+}
+
+// 立即更新：觸發 Apps Script 抓取當前廠商的價格
+async function trackerFetchNow() {
+  if (!trackerCurrentClient) return;
+  const btn = document.getElementById('tracker-fetch-btn');
+  btn.textContent = '⏳ 更新中…';
+  btn.style.opacity = '0.6';
+  btn.disabled = true;
+  trackerSetStatus('正在抓取最新價格，約需 30–60 秒…');
+  try {
+    const res = await trackerCallApi({ action: 'fetchClientPrices', client: trackerCurrentClient });
+    trackerSetStatus(`✅ ${res.message || '更新完成'}`);
+    // 重新載入資料
+    await trackerSelectClient(trackerCurrentClient);
+  } catch(e) {
+    trackerSetStatus('❌ 更新失敗：' + e.message);
+  } finally {
+    btn.textContent = '🔄 立即更新價格';
+    btn.style.opacity = '1';
+    btn.disabled = false;
+  }
+}
+
+// 儲存原始資料供搜尋用
+let trackerAllProducts = [];
+
+function trackerRenderCards(products) {
+  trackerAllProducts = products || [];
+  document.getElementById('tracker-table-count').textContent =
+    products?.length ? `共 ${products.length} 筆` : '';
+  trackerFilterTable('');
+}
+
+function trackerFilterTable(q) {
+  const wrap = document.getElementById('tracker-cards');
+  let products = trackerAllProducts;
+
+  if (!products || !products.length) {
+    wrap.innerHTML = `<div style="padding:48px;text-align:center;color:var(--text3);font-size:13px;">此廠商尚無競品追蹤資料<br><span style="font-size:11px;opacity:.6;">請在廠商資料夾建立「競品追蹤」Google Sheet</span></div>`;
+    return;
+  }
+
+  if (q && q.trim()) {
+    products = products.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
+  }
+
+  document.getElementById('tracker-table-count').textContent = `共 ${products.length} 筆`;
+
+  const thStyle = `padding:9px 16px;font-size:11px;font-weight:600;color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.06);border-bottom:1px solid rgba(255,255,255,0.1);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;`;
+
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr>
+      <th style="${thStyle}text-align:left;">商品名稱</th>
+      <th style="${thStyle}text-align:right;">最新價格</th>
+      <th style="${thStyle}text-align:right;">昨日價格</th>
+      <th style="${thStyle}text-align:right;">變動</th>
+      <th style="${thStyle}text-align:center;">上次更新</th>
+      <th style="${thStyle}text-align:center;">連結</th>
+    </tr></thead><tbody>`;
+
+  products.forEach((p, i) => {
+    // 從歷史找前一天價格
+    let prevPrice = null;
+    if (trackerData) {
+      const prod = trackerData.products.find(tp => tp.name === p.name);
+      if (prod) {
+        const vals = prod.prices.filter(v => v != null);
+        if (vals.length >= 2) prevPrice = vals[vals.length - 2];
+      }
+    }
+
+    let changeHtml = '<span style="color:var(--text3)">—</span>';
+    if (p.price != null && prevPrice != null) {
+      const diff = p.price - prevPrice;
+      if (diff > 0)
+        changeHtml = `<span style="color:var(--red);font-weight:600;">▲ ${diff.toLocaleString('zh-TW')}</span>`;
+      else if (diff < 0)
+        changeHtml = `<span style="color:var(--teal);font-weight:600;">▼ ${Math.abs(diff).toLocaleString('zh-TW')}</span>`;
+      else
+        changeHtml = `<span style="color:var(--text3);">持平</span>`;
+    }
+
+    const priceHtml = p.price != null
+      ? `<span style="font-size:15px;font-weight:400;letter-spacing:-0.01em;">$${p.price.toLocaleString('zh-TW')}</span>`
+      : '<span style="color:var(--text3)">—</span>';
+
+    const prevHtml = prevPrice != null
+      ? `<span style="color:var(--text2);">$${prevPrice.toLocaleString('zh-TW')}</span>`
+      : '<span style="color:var(--text3)">—</span>';
+
+    // 格式化時間：只顯示日期+時間
+    const updatedAt = p.updatedAt
+      ? String(p.updatedAt).replace('GMT+0800 (台北標準時間)', '').trim().slice(0, 16)
+      : '—';
+
+    const linkHtml = p.url
+      ? `<a href="${p.url}" target="_blank" style="color:var(--teal);font-size:11px;text-decoration:none;border:1px solid rgba(62,207,170,0.3);padding:3px 10px;border-radius:12px;">開啟</a>`
+      : '—';
+
+    html += `<tr style="border-bottom:1px solid var(--border);transition:background .13s;"
+      onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background=''">
+      <td style="padding:11px 16px;font-weight:500;color:rgba(255,255,255,0.88);max-width:360px;">${p.name}</td>
+      <td style="padding:11px 16px;text-align:right;">${priceHtml}</td>
+      <td style="padding:11px 16px;text-align:right;">${prevHtml}</td>
+      <td style="padding:11px 16px;text-align:right;">${changeHtml}</td>
+      <td style="padding:11px 16px;text-align:center;font-size:11px;color:rgba(255,255,255,0.4);">${updatedAt}</td>
+      <td style="padding:11px 16px;text-align:center;">${linkHtml}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function trackerRenderChart() {
+  if (!trackerData || !trackerData.products.length) return;
+  const q = document.getElementById('tracker-search').value.toLowerCase();
+  let prods = trackerData.products;
+  if (q) prods = prods.filter(p => p.name.toLowerCase().includes(q));
+
+  const colors = ['#3ecfaa','#5ba4e8','#e8934a','#e87a7a','#9b8af5','#3ec4cf','#e8c44a','#e87ab4','#7ac47a','#e8a43e'];
+  const datasets = prods.map((p, i) => ({
+    label: p.name,
+    data: p.prices,
+    borderColor: colors[i % colors.length],
+    backgroundColor: 'transparent',
+    tension: 0.3, pointRadius: 4, borderWidth: 2, spanGaps: true,
+  }));
+
+  if (trackerPriceChartInstance) { trackerPriceChartInstance.destroy(); trackerPriceChartInstance = null; }
+  const ctx = document.getElementById('tracker-chart-canvas').getContext('2d');
+  trackerPriceChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels: trackerData.dates.map(d => d.slice(5)), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { position:'bottom', labels:{ font:{size:11}, color:'rgba(255,255,255,0.6)', usePointStyle:true, boxWidth:8 } },
+        tooltip: { callbacks:{ label: c=>`${c.dataset.label}: ${c.parsed.y!=null?'$'+c.parsed.y.toLocaleString('zh-TW'):'—'}` } }
+      },
+      scales: {
+        x: { grid:{ color:'rgba(255,255,255,0.06)' }, ticks:{ font:{size:11}, color:'rgba(255,255,255,0.45)' } },
+        y: { grid:{ color:'rgba(255,255,255,0.06)' }, ticks:{ font:{size:11}, color:'rgba(255,255,255,0.45)', callback: v=>'$'+v.toLocaleString('zh-TW') } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// PRODUCT DATABASE JS (Google Drive / Sheets 版)
+// ============================================================
+
+// --- 狀態變數 ---
+let pdCurrentTab     = 'shopee';
+let pdCurrentClient  = null;
+let pdClients        = [];       // [{ name, folderId, platforms }]
+let pdAllHeaders     = [];
+let pdAllRows        = [];
+let pdDailyMap       = {};       // key → { price, stock }
+let pdDailyCache     = {};       // client+platform+date → items
+let pdProductCache   = {};       // client+platform → { headers, rows }
+let pdAvailDates     = [];       // 當前廠商+平台的可用日期
+let pdSortCol        = null;
+let pdSortDir        = 1;
+let pdSortDailyField = null;
+let pdSortDailyDir   = 1;
+let pdCurrentView    = 'table';
+let pdPriceChartInstance = null;
+
+// 讀取已儲存的 API URL
+let PD_API_URL = '';
+try { PD_API_URL = localStorage.getItem('pd_api_url') || ''; } catch(e) {}
+
+// --- 初始化：頁面載入 / 切換到商品資料庫時呼叫 ---
+async function pdInit() {
+  // 還原 API URL 輸入框
+  const urlInput = document.getElementById('pd-api-url');
+  if (urlInput && PD_API_URL) urlInput.value = PD_API_URL;
+
+  if (!PD_API_URL) {
+    pdSetStatus('請先在右上角輸入並儲存 Apps Script 網址', 'warn');
+    pdSetClientList([]);
+    return;
+  }
+  await pdLoadClients();
+}
+
+
+// ============================================================
+// base64 xlsx 解析：Apps Script 回傳 b64，前端用 SheetJS 解析成 items map
+// ============================================================
+function pdParseB64Xlsx(b64, platform) {
+  if (!b64) return {};
+  try {
+    const wb = XLSX.read(b64, { type: 'base64' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const arr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (!arr || arr.length < 2) return {};
+
+    // 找 header 列
+    let hIdx = -1;
+    for (let i = 0; i < Math.min(arr.length, 10); i++) {
+      const row = arr[i].map(v => String(v || '').trim());
+      if (platform === 'shopee' && row.includes('商品ID')) { hIdx = i; break; }
+      if (platform === 'momo'   && row.includes('商品編號')) { hIdx = i; break; }
+    }
+    if (hIdx === -1) return {};
+
+    const headers = arr[hIdx].map(v => String(v || '').trim());
+    const ci = k => headers.indexOf(k);
+    const fmtId = v => { const n = Number(v); return isNaN(n) ? String(v || '').trim() : String(Math.round(n)); };
+    const toNum = v => { if (v === '' || v === null || v === undefined) return null; const n = parseFloat(String(v).replace(/[,$]/g,'')); return isNaN(n) ? null : n; };
+    const items = {};
+
+    if (platform === 'shopee') {
+      const idI = ci('商品ID'), varI = ci('商品選項ID'), priceI = ci('價格'), stockI = ci('庫存');
+      for (let i = hIdx + 1; i < arr.length; i++) {
+        const r = arr[i];
+        const id = fmtId(r[idI]), var_ = fmtId(r[varI]);
+        if (!id) continue;
+        items[id + '||' + var_] = { price: toNum(r[priceI]), stock: toNum(r[stockI]) };
+      }
+    } else {
+      const idI    = ci('商品編號') >= 0 ? ci('商品編號') : ci('品號');
+      const specI  = ci('單品詳細') >= 0 ? ci('單品詳細') : -1;
+      const priceI = ci('售價(含稅)') >= 0 ? ci('售價(含稅)') : ci('目前售價') >= 0 ? ci('目前售價') : ci('售價');
+      const stockI = ci('可接單量') >= 0 ? ci('可接單量') : ci('庫存');
+      for (let i = hIdx + 1; i < arr.length; i++) {
+        const r = arr[i];
+        const id = fmtId(r[idI]);
+        if (!id) continue;
+        const spec = specI >= 0 ? String(r[specI] || '').trim() : '';
+        items[id + '||' + spec] = { price: toNum(r[priceI]), stock: toNum(r[stockI]) };
+      }
+    }
+    return items;
+  } catch(e) {
+    console.error('pdParseB64Xlsx error', e);
+    return {};
+  }
+}
+
+// 儲存 API URL
+function pdSaveApiUrl() {
+  const v = (document.getElementById('pd-api-url').value || '').trim();
+  if (!v) { alert('請輸入 Apps Script Web App 網址'); return; }
+  PD_API_URL = v;
+  try { localStorage.setItem('pd_api_url', v); } catch(e) {}
+  document.getElementById('pd-api-status').textContent = '✅ 已儲存';
+  setTimeout(() => document.getElementById('pd-api-status').textContent = '', 2000);
+  pdLoadClients();
+}
+
+// --- API 呼叫工具 ---
+async function pdCallApi(params) {
+  const url = PD_API_URL + '?' + new URLSearchParams(params).toString();
+  const res  = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// --- 狀態 / 載入提示 ---
+function pdSetLoading(msg) {
+  const bar = document.getElementById('pd-loading-bar');
+  const msgEl = document.getElementById('pd-loading-msg');
+  if (msg) { bar.style.display = 'flex'; if(msgEl) msgEl.textContent = msg; }
+  else      { bar.style.display = 'none'; }
+}
+function pdSetStatus(msg, type) {
+  const el = document.getElementById('pd-filter-info');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'warn' ? 'var(--orange)' : type === 'err' ? 'var(--red)' : 'var(--text3)';
+}
+
+// ============================================================
+// 1. 載入廠商清單
+// ============================================================
+async function pdLoadClients() {
+  pdSetLoading('載入廠商清單中…');
+  try {
+    const data = await pdCallApi({ action: 'getClients' });
+    pdClients = data.clients || [];
+    pdSetClientList(pdClients);
+    pdSetLoading(null);
+    pdSetStatus(`共 ${pdClients.length} 個廠商`, 'info');
+  } catch(e) {
+    pdSetLoading(null);
+    pdSetStatus('❌ 廠商清單載入失敗：' + e.message, 'err');
+    pdSetClientList([]);
+  }
+}
+
+// 渲染廠商按鈕列表
+function pdSetClientList(clients) {
+  const wrap = document.getElementById('pd-client-list');
+  if (!wrap) return;
+
+  // 依平台篩選：只顯示有當前平台的廠商
+  const filtered = clients.filter(c => c.platforms[pdCurrentTab]);
+
+  if (!filtered.length) {
+    wrap.innerHTML = `<span style="font-size:12px;color:var(--text3);">${clients.length ? '此平台無廠商' : '尚未載入'}</span>`;
+    return;
+  }
+  const col = pdCurrentTab === 'shopee' ? 'var(--shopee)' : 'var(--momo)';
+  const bg  = pdCurrentTab === 'shopee' ? '#fff2ef' : '#fff0f2';
+  const bc  = pdCurrentTab === 'shopee' ? '#ffd0c7' : '#ffd6de';
+
+  wrap.innerHTML = filtered.map(c => {
+    const isActive = c.name === pdCurrentClient;
+    return `<button onclick="pdSelectClient('${c.name}')"
+      style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
+             border:1.5px solid ${isActive ? col : 'var(--border-md)'};
+             background:${isActive ? bg : 'var(--surface)'};
+             color:${isActive ? col : 'var(--text2)'};
+             transition:all .15s;"
+    >${c.name}</button>`;
+  }).join('');
+}
+
+// ============================================================
+// 2. 選廠商 → 載入可用日期
+// ============================================================
+async function pdSelectClient(name) {
+  pdCurrentClient = name;
+  pdSetClientList(pdClients); // 重繪按鈕（highlight）
+  pdAllHeaders = []; pdAllRows = []; pdDailyMap = {};
+  pdClearTable();
+
+  // 載入日期清單
+  pdSetLoading(`載入 ${name} 的日期清單…`);
+  document.getElementById('pd-date-select').value = ''; document.getElementById('pd-date-hint').textContent = '載入中…';
+  try {
+    const data = await pdCallApi({ action: 'getDates', client: name, platform: pdCurrentTab });
+    pdAvailDates = data.dates || [];
+    pdFillDateSelect(pdAvailDates);
+    pdSetLoading(null);
+    // 自動選最新日期並載入
+    if (pdAvailDates.length) {
+      document.getElementById('pd-date-select').value = pdAvailDates[0];
+      await pdLoadData();
+    } else {
+      pdSetStatus('此廠商此平台尚無每日數據', 'warn');
+    }
+  } catch(e) {
+    pdSetLoading(null);
+    pdSetStatus('❌ 日期載入失敗：' + e.message, 'err');
+  }
+}
+
+function pdFillDateSelect(dates) {
+  const input = document.getElementById('pd-date-select');
+  const hint  = document.getElementById('pd-date-hint');
+  if (!dates.length) {
+    input.value = '';
+    if (hint) hint.textContent = '此廠商無數據';
+    return;
+  }
+  // 設定可選範圍為最舊到最新
+  const sorted = [...dates].sort();
+  input.min = sorted[0];
+  input.max = sorted[sorted.length - 1];
+  // 預設帶入最新日期
+  input.value = dates[0]; // dates 已是 desc 排序，第一筆最新
+  if (hint) hint.textContent = `共 ${dates.length} 筆數據`;
+}
+
+async function pdOnDateChange() {
+  if (!pdCurrentClient) return;
+  const date = document.getElementById('pd-date-select').value;
+  const hint = document.getElementById('pd-date-hint');
+  if (!date) return;
+  // 檢查所選日期是否有檔案
+  if (pdAvailDates.length && !pdAvailDates.includes(date)) {
+    if (hint) hint.textContent = '⚠️ 此日期無數據';
+    return;
+  }
+  if (hint) hint.textContent = '';
+  await pdLoadData();
+}
+
+// ============================================================
+// 3. 載入商品資料表 + 每日數據（同時進行）
+// ============================================================
+async function pdLoadData() {
+  if (!pdCurrentClient) return;
+  const date = document.getElementById('pd-date-select').value;
+  if (!date) return;
+
+  pdSetLoading(`載入 ${pdCurrentClient} ${pdCurrentTab === 'shopee' ? '蝦皮' : 'Momo'} 資料…`);
+
+  const prodKey  = pdCurrentClient + '|' + pdCurrentTab;
+  const dailyKey = pdCurrentClient + '|' + pdCurrentTab + '|' + date;
+
+  try {
+    // 商品資料表：有快取就用快取
+    if (!pdProductCache[prodKey]) {
+      const prodData = await pdCallApi({ action: 'getProducts', client: pdCurrentClient, platform: pdCurrentTab });
+      pdProductCache[prodKey] = prodData;
+    }
+    // 每日數據：有快取就用快取
+    if (!pdDailyCache[dailyKey]) {
+      const dailyData = await pdCallApi({ action: 'getDaily', client: pdCurrentClient, platform: pdCurrentTab, date });
+      pdDailyCache[dailyKey] = pdParseB64Xlsx(dailyData.b64, pdCurrentTab);
+    }
+
+    const prod = pdProductCache[prodKey];
+    pdAllHeaders = prod.headers || [];
+    pdAllRows    = prod.rows    || [];
+    pdDailyMap   = pdDailyCache[dailyKey];
+
+    pdSetLoading(null);
+    pdSetStatus(`${pdCurrentClient}　${date}　共 ${pdAllRows.length} 筆`);
+    pdRender();
+
+  } catch(e) {
+    pdSetLoading(null);
+    pdSetStatus('❌ 資料載入失敗：' + e.message, 'err');
+  }
+}
+
+// ============================================================
+// 4. 渲染表格
+// ============================================================
+function pdClearTable() {
+  document.getElementById('pd-thead').innerHTML = '';
+  document.getElementById('pd-tbody').innerHTML =
+    '<tr><td style="padding:60px;text-align:center;color:var(--text3);">請選擇廠商與日期</td></tr>';
+  document.getElementById('pd-row-count').textContent = '';
+}
+
+function pdRender() {
+  if (!pdAllHeaders.length) { pdClearTable(); return; }
+
+  const thStyle = (isDaily) =>
+    `background:${isDaily?'#fff8f0':'var(--surface2)'};padding:9px 12px;text-align:left;` +
+    `font-weight:700;font-size:11px;color:${isDaily?'#e67e22':'var(--text2)'};` +
+    `border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;`;
+
+  document.getElementById('pd-thead').innerHTML = '<tr>' +
+    pdAllHeaders.map((h, i) =>
+      `<th style="${thStyle(false)}" onclick="pdSort(${i})">${h||'—'} <span id="pd-sort-icon-${i}" style="opacity:.4;font-size:10px;">↕</span></th>`
+    ).join('') +
+    `<th style="${thStyle(true)}" onclick="pdSortDailyFn('stock')">📦 庫存 <span id="pd-sort-icon-stock" style="opacity:.4;font-size:10px;">↕</span></th>` +
+    `<th style="${thStyle(true)}" onclick="pdSortDailyFn('price')">💰 現價 <span id="pd-sort-icon-price" style="opacity:.4;font-size:10px;">↕</span></th>` +
+    '</tr>';
+
+  pdSearch(document.getElementById('pd-search').value || '');
+}
+
+function pdSearch(q) {
+  const tbody   = document.getElementById('pd-tbody');
+  const countEl = document.getElementById('pd-row-count');
+  const fmtId   = v => { const n = Number(v); return isNaN(n) ? String(v||'').trim() : String(Math.round(n)); };
+  const fmtM    = n => n != null ? '$' + n.toLocaleString('zh-TW') : '—';
+
+  // 決定 key 欄位
+  const kf  = pdCurrentTab === 'shopee' ? ['商品ID','商品選項ID'] : ['商品編號','單品詳細'];
+  const k1I = pdAllHeaders.indexOf(kf[0]);
+  const k2I = pdAllHeaders.indexOf(kf[1]);
+
+  let data = [...pdAllRows];
+
+  // 價格異動篩選
+  if (document.getElementById('pd-price-change-filter')?.checked) {
+    data = data.filter(r => {
+      const key = buildKey(r);
+      const d = pdDailyMap[key];
+      return d && d.price != null;
+    });
+  }
+
+  // 關鍵字搜尋
+  if (q && q.trim()) {
+    data = data.filter(r => r.some(v => String(v).toLowerCase().includes(q.toLowerCase())));
+  }
+
+  // 排序
+  if (pdSortCol !== null) {
+    data.sort((a, b) => {
+      const av = a[pdSortCol], bv = b[pdSortCol];
+      const an = parseFloat(String(av||'').replace(/[,$]/g,'')),
+            bn = parseFloat(String(bv||'').replace(/[,$]/g,''));
+      if (!isNaN(an) && !isNaN(bn)) return (an - bn) * pdSortDir;
+      return String(av||'').localeCompare(String(bv||'')) * pdSortDir;
+    });
+  } else if (pdSortDailyField) {
+    data.sort((a, b) => {
+      const ka = fmtId(a[k1I>=0?k1I:0]) + '||' + fmtId(a[k2I>=0?k2I:0]);
+      const kb = fmtId(b[k1I>=0?k1I:0]) + '||' + fmtId(b[k2I>=0?k2I:0]);
+      const da = pdDailyMap[ka] || {}, db = pdDailyMap[kb] || {};
+      const av = da[pdSortDailyField] ?? -1, bv = db[pdSortDailyField] ?? -1;
+      return (av - bv) * pdSortDailyDir;
+    });
+  }
+
+  countEl.textContent = data.length ? `共 ${data.length} 筆` : '';
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="${pdAllHeaders.length+2}" style="padding:40px;text-align:center;color:var(--text3);">無資料</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map(r => {
+    const key   = fmtId(r[k1I>=0?k1I:0]) + '||' + fmtId(r[k2I>=0?k2I:0]);
+    const d     = pdDailyMap[key] || {};
+    const stock = d.stock != null
+      ? `<span style="font-weight:700;color:${d.stock===0?'var(--red)':d.stock<=10?'var(--orange)':'var(--green)'}">${d.stock.toLocaleString('zh-TW')}</span>`
+      : '<span style="color:#ddd">—</span>';
+    const price = d.price != null
+      ? `<span style="font-weight:700;">${fmtM(d.price)}</span>`
+      : '<span style="color:#ddd">—</span>';
+    return '<tr>' +
+      pdAllHeaders.map((_, i) =>
+        `<td style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.07);font-size:12px;white-space:nowrap;color:rgba(255,255,255,0.82);">${r[i]!=null&&r[i]!==''?String(r[i]):'—'}</td>`
+      ).join('') +
+      `<td style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.07);text-align:right;background:rgba(232,147,74,0.06)">${stock}</td>` +
+      `<td style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.07);text-align:right;background:rgba(232,147,74,0.06)">${price}</td>` +
+      '</tr>';
+  }).join('');
+}
+
+// ============================================================
+// 5. 平台切換
+// ============================================================
+function pdSwitchTab(tab) {
+  pdCurrentTab = tab;
+  pdCurrentClient = null;
+  pdAllHeaders = []; pdAllRows = []; pdDailyMap = {};
+  pdAvailDates = [];
+
+  document.getElementById('pd-tab-shopee').style.cssText =
+    `padding:13px 24px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;` +
+    `font-weight:${tab==='shopee'?'700':'600'};color:${tab==='shopee'?'var(--shopee)':'var(--text2)'};` +
+    `border-bottom:3px solid ${tab==='shopee'?'var(--shopee)':'transparent'};margin-bottom:-2px;`;
+  document.getElementById('pd-tab-momo').style.cssText =
+    `padding:13px 24px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;` +
+    `font-weight:${tab==='momo'?'700':'600'};color:${tab==='momo'?'var(--momo)':'var(--text2)'};` +
+    `border-bottom:3px solid ${tab==='momo'?'var(--momo)':'transparent'};margin-bottom:-2px;`;
+
+  pdSetClientList(pdClients);
+  document.getElementById('pd-date-select').value = ''; const _h = document.getElementById('pd-date-hint'); if(_h) _h.textContent = '請先選廠商';
+  pdClearTable();
+}
+
+// ============================================================
+// 6. 排序
+// ============================================================
+function pdSort(colIdx) {
+  if (pdSortCol === colIdx) pdSortDir *= -1;
+  else { pdSortCol = colIdx; pdSortDir = 1; }
+  pdSortDailyField = null;
+  document.querySelectorAll('[id^="pd-sort-icon-"]').forEach(el => { el.textContent='↕'; el.style.opacity='.4'; });
+  const icon = document.getElementById('pd-sort-icon-' + colIdx);
+  if (icon) { icon.textContent = pdSortDir===1?'↑':'↓'; icon.style.opacity='1'; }
+  pdSearch(document.getElementById('pd-search').value || '');
+}
+
+function pdSortDailyFn(field) {
+  if (pdSortDailyField === field) pdSortDailyDir *= -1;
+  else { pdSortDailyField = field; pdSortDailyDir = 1; pdSortCol = null; }
+  document.querySelectorAll('[id^="pd-sort-icon-"]').forEach(el => { el.textContent='↕'; el.style.opacity='.4'; });
+  const icon = document.getElementById('pd-sort-icon-' + field);
+  if (icon) { icon.textContent = pdSortDailyDir===1?'↑':'↓'; icon.style.opacity='1'; }
+  pdSearch(document.getElementById('pd-search').value || '');
+}
+
+// ============================================================
+// 7. 搜尋 / view 切換
+// ============================================================
+function pdOnSearch(q) {
+  pdSearch(q);
+  if (pdCurrentView === 'chart') {
+    if (pdChartMode === 'table') pdRenderPriceTable();
+    else pdRenderPriceChart();
+  }
+}
+
+function pdSwitchView(view) {
+  pdCurrentView = view;
+  document.getElementById('pd-view-table').style.display = view==='table' ? 'block' : 'none';
+  document.getElementById('pd-view-chart').style.display = view==='chart' ? 'block' : 'none';
+  document.getElementById('pd-range-wrap').style.display = view==='chart' ? 'flex' : 'none';
+  const tBtn = document.getElementById('pd-view-table-btn');
+  const cBtn = document.getElementById('pd-view-chart-btn');
+  tBtn.style.cssText = `padding:5px 16px;border-radius:20px;border:1px solid rgba(255,98,64,0.6);background:${view==='table'?'rgba(255,98,64,0.25)':'rgba(255,98,64,0.08)'};color:#ff9178;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;`;
+  cBtn.style.cssText = `padding:5px 16px;border-radius:20px;border:1px solid ${view==='chart'?'rgba(62,207,170,0.6)':'rgba(255,255,255,0.2)'};background:${view==='chart'?'rgba(62,207,170,0.2)':'rgba(255,255,255,0.06)'};color:${view==='chart'?'#3ecfaa':'rgba(255,255,255,0.7)'};font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;`;
+  if (view === 'chart') {
+    // 每次進入變價紀錄，重設回表格模式
+    pdChartMode = 'table';
+    pdSwitchChartMode('table');
+  }
+}
+
+// ============================================================
+// 8. 變價紀錄折線圖（跨多日期）
+// ============================================================
+async function pdRenderPriceChart() {
+  const wrap  = document.getElementById('pd-price-chart-wrap');
+  const empty = document.getElementById('pd-price-chart-empty');
+  if (!pdCurrentClient || !pdAvailDates.length) {
+    wrap.style.display='none'; empty.style.display='block'; return;
+  }
+
+  const from = document.getElementById('pd-date-from').value;
+  const to   = document.getElementById('pd-date-to').value;
+  const q    = document.getElementById('pd-search').value.toLowerCase();
+
+  // 篩選日期範圍
+  const useDates = pdAvailDates.filter(d => (!from||d>=from) && (!to||d<=to)).sort();
+  if (!useDates.length || !pdAllRows.length) {
+    wrap.style.display='none'; empty.style.display='block'; return;
+  }
+
+  // 收集這些日期的每日數據（有快取用快取，沒有就呼叫 API）
+  pdSetLoading('載入價格歷史…');
+  for (const date of useDates) {
+    const key = pdCurrentClient + '|' + pdCurrentTab + '|' + date;
+    if (!pdDailyCache[key]) {
+      try {
+        const res = await pdCallApi({ action:'getDaily', client:pdCurrentClient, platform:pdCurrentTab, date });
+        pdDailyCache[key] = pdParseB64Xlsx(res.b64, pdCurrentTab);
+      } catch(e) {
+        pdDailyCache[key] = {};
+      }
+    }
+  }
+  pdSetLoading(null);
+
+  const kf   = pdCurrentTab === 'shopee' ? ['商品ID','商品選項ID'] : ['商品編號','單品詳細'];
+  const k1I  = pdAllHeaders.indexOf(kf[0]);
+  const k2I  = pdAllHeaders.indexOf(kf[1]);
+  const nameI = pdAllHeaders.findIndex(h => h.includes('商品名稱'));
+  const fmtId = v => { const n=Number(v); return isNaN(n)?String(v||'').trim():String(Math.round(n)); };
+  const priceChangeOnly = document.getElementById('pd-price-change-filter')?.checked;
+
+  let rows = [...pdAllRows];
+
+  // 關鍵字篩選
+  if (q) rows = rows.filter(r => r.some(v => String(v||'').toLowerCase().includes(q)));
+
+  // 只顯示價格異動：在所有 useDates 中，至少有 2 個不同的非 null 價格
+  if (priceChangeOnly) {
+    rows = rows.filter(r => {
+      const key = fmtId(r[k1I>=0?k1I:0]) + '||' + fmtId(r[k2I>=0?k2I:0]);
+      const prices = useDates.map(date => {
+        const cacheKey = pdCurrentClient + '|' + pdCurrentTab + '|' + date;
+        return pdDailyCache[cacheKey]?.[key]?.price ?? null;
+      }).filter(p => p !== null);
+      return new Set(prices).size > 1;
+    });
+  }
+
+  // 最多 20 條線（在篩選後才截斷）
+  rows = rows.slice(0, 20);
+
+  const colors = ['#6366f1','#e67e22','#2ecc71','#e74c3c','#3498db','#9b59b6','#1abc9c','#f39c12','#e91e63','#00bcd4','#ff5722','#8bc34a','#607d8b','#795548','#ff9800','#673ab7','#009688','#f44336','#2196f3','#4caf50'];
+
+  const datasets = rows.map((r, ri) => {
+    const key  = fmtId(r[k1I>=0?k1I:0]) + '||' + fmtId(r[k2I>=0?k2I:0]);
+    const name = nameI >= 0 ? String(r[nameI]||'').trim().slice(0,30) : key;
+    const data = useDates.map(date => {
+      const cacheKey = pdCurrentClient + '|' + pdCurrentTab + '|' + date;
+      return pdDailyCache[cacheKey]?.[key]?.price ?? null;
+    });
+    return { label:name, data, borderColor:colors[ri%colors.length], backgroundColor:'transparent', tension:0.3, pointRadius:3, borderWidth:2, spanGaps:true };
+  });
+
+  if (pdPriceChartInstance) { pdPriceChartInstance.destroy(); pdPriceChartInstance=null; }
+  wrap.style.display='block'; empty.style.display='none';
+  const ctx = document.getElementById('pd-price-chart').getContext('2d');
+  pdPriceChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels: useDates.map(d=>d.slice(5)), datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'nearest', intersect:false },
+      plugins:{
+        legend:{ position:'bottom', labels:{ font:{size:11}, usePointStyle:true, boxWidth:8 } },
+        tooltip:{ callbacks:{ label: c=>`${c.dataset.label}: $${c.parsed.y??'—'}` } }
+      },
+      scales:{
+        x:{ grid:{color:'#f0f0f0'}, ticks:{font:{size:11}} },
+        y:{ grid:{color:'#f0f0f0'}, ticks:{font:{size:11}, callback:v=>'$'+v} }
+      }
+    }
+  });
+}
+
+// ============================================================
+// 8b. 變價紀錄子模式切換（折線圖 / 價格表格）
+// ============================================================
+let pdChartMode = 'table'; // 'chart' | 'table'
+
+function pdSwitchChartMode(mode) {
+  pdChartMode = mode;
+  const isTable = mode === 'table';
+
+  document.getElementById('pd-chartmode-table').style.display = isTable ? 'block' : 'none';
+  document.getElementById('pd-chartmode-chart').style.display = isTable ? 'none'  : 'block';
+
+  // 按鈕樣式：表格在前
+  document.getElementById('pd-chart-mode-table').style.cssText =
+    `padding:7px 18px;border-radius:20px 20px 0 0;border:1px solid var(--border);border-bottom:none;` +
+    `background:${isTable?'white':'transparent'};color:${isTable?'#6366f1':'var(--text2)'};` +
+    `font-size:12px;font-weight:${isTable?'700':'600'};cursor:pointer;font-family:inherit;margin-bottom:-1px;position:relative;z-index:${isTable?1:0};`;
+  document.getElementById('pd-chart-mode-chart').style.cssText =
+    `padding:7px 18px;border-radius:20px 20px 0 0;border:1px solid ${isTable?'transparent':'var(--border)'};border-bottom:none;` +
+    `background:${isTable?'transparent':'white'};color:${isTable?'var(--text2)':'#6366f1'};` +
+    `font-size:12px;font-weight:${isTable?'600':'700'};cursor:pointer;font-family:inherit;margin-bottom:-1px;position:relative;z-index:${isTable?0:1};`;
+
+  if (mode === 'table') {
+    pdRenderPriceTable();
+  } else {
+    // 清掉舊圖再重繪，確保 priceChangeOnly 篩選即時生效
+    if (pdPriceChartInstance) { pdPriceChartInstance.destroy(); pdPriceChartInstance = null; }
+    pdRenderPriceChart();
+  }
+}
+
+// ============================================================
+// 8c. 變價紀錄 → 價格表格
+// 列 = 商品名稱，欄 = 日期，格子 = 價格（有變動標色）
+// ============================================================
+async function pdRenderPriceTable() {
+  const tbody = document.getElementById('pd-price-tbody');
+  const thead = document.getElementById('pd-price-thead');
+  if (!pdCurrentClient || !pdAvailDates.length) {
+    tbody.innerHTML = '<tr><td style="padding:40px;text-align:center;color:var(--text3);">請先選廠商並設定日期區間</td></tr>';
+    return;
+  }
+
+  const from = document.getElementById('pd-date-from').value;
+  const to   = document.getElementById('pd-date-to').value;
+  const q    = document.getElementById('pd-search').value.toLowerCase();
+  const priceChangeOnly = document.getElementById('pd-price-change-filter')?.checked;
+
+  const useDates = pdAvailDates.filter(d => (!from||d>=from) && (!to||d<=to)).sort();
+  if (!useDates.length) {
+    tbody.innerHTML = '<tr><td style="padding:40px;text-align:center;color:var(--text3);">請設定日期區間</td></tr>';
+    return;
+  }
+
+  // 載入尚未快取的日期
+  pdSetLoading('載入價格歷史…');
+  for (const date of useDates) {
+    const key = pdCurrentClient + '|' + pdCurrentTab + '|' + date;
+    if (!pdDailyCache[key]) {
+      try {
+        const res = await pdCallApi({ action:'getDaily', client:pdCurrentClient, platform:pdCurrentTab, date });
+        pdDailyCache[key] = pdParseB64Xlsx(res.b64, pdCurrentTab);
+      } catch(e) { pdDailyCache[key] = {}; }
+    }
+  }
+  pdSetLoading(null);
+
+  const kf    = pdCurrentTab === 'shopee' ? ['商品ID','商品選項ID'] : ['商品編號','單品詳細'];
+  const k1I   = pdAllHeaders.indexOf(kf[0]);
+  const k2I   = pdAllHeaders.indexOf(kf[1]);
+  const nameI = pdAllHeaders.findIndex(h => h.includes('商品名稱'));
+  const fmtId = v => { const n=Number(v); return isNaN(n)?String(v||'').trim():String(Math.round(n)); };
+
+  let rows = [...pdAllRows];
+  if (q) rows = rows.filter(r => r.some(v => String(v||'').toLowerCase().includes(q)));
+
+  // 建立每個商品的價格陣列
+  let tableRows = rows.map(r => {
+    const key  = fmtId(r[k1I>=0?k1I:0]) + '||' + fmtId(r[k2I>=0?k2I:0]);
+    const name = nameI >= 0 ? String(r[nameI]||'').trim() : key;
+    const prices = useDates.map(date => {
+      const cacheKey = pdCurrentClient + '|' + pdCurrentTab + '|' + date;
+      return pdDailyCache[cacheKey]?.[key]?.price ?? null;
+    });
+    return { name, prices };
+  });
+
+  // 只顯示價格異動：至少有 2 個不同的非 null 值
+  if (priceChangeOnly) {
+    tableRows = tableRows.filter(r => {
+      const vals = r.prices.filter(p => p !== null);
+      return new Set(vals).size > 1;
+    });
+  }
+
+  if (!tableRows.length) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '<tr><td style="padding:40px;text-align:center;color:var(--text3);">此區間無' + (priceChangeOnly?'價格異動':'資料') + '</td></tr>';
+    return;
+  }
+
+  // 表頭：商品名稱 + 各日期
+  const thBase = 'padding:8px 12px;font-size:11px;font-weight:600;color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.06);border-bottom:1px solid rgba(255,255,255,0.1);white-space:nowrap;';
+  thead.innerHTML = '<tr>' +
+    `<th style="${thBase}text-align:left;position:sticky;left:0;z-index:2;min-width:200px;">商品名稱</th>` +
+    useDates.map(d => `<th style="${thBase}text-align:center;">${d.slice(5)}</th>`).join('') +
+    '</tr>';
+
+  // 表格內容
+  tbody.innerHTML = tableRows.map(row => {
+    const nonNull = row.prices.filter(p => p !== null);
+    const minP = nonNull.length ? Math.min(...nonNull) : null;
+    const maxP = nonNull.length ? Math.max(...nonNull) : null;
+
+    const cells = row.prices.map((price, i) => {
+      if (price === null) return `<td style="padding:8px 12px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.2);">—</td>`;
+
+      const prevPrice = row.prices.slice(0, i).filter(p => p !== null).pop() ?? null;
+      let bg = '', color = 'var(--text)', badge = '';
+
+      if (prevPrice !== null && price !== prevPrice) {
+        if (price > prevPrice) {
+          bg = 'background:rgba(226,75,74,0.08);';
+          color = '#f07070';
+          badge = `<span style="font-size:9px;margin-left:3px;">▲</span>`;
+        } else {
+          bg = 'background:rgba(29,158,117,0.08);';
+          color = '#3ecfaa';
+          badge = `<span style="font-size:9px;margin-left:3px;">▼</span>`;
+        }
+      }
+      const isBold = (price === maxP && maxP !== minP) || (price === minP && maxP !== minP) ? 'font-weight:700;' : '';
+      return `<td style="padding:8px 12px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.08);${bg}${isBold}color:${color};white-space:nowrap;">$${price.toLocaleString('zh-TW')}${badge}</td>`;
+    });
+
+    return `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:500;position:sticky;left:0;background:white;z-index:1;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${row.name}">${row.name}</td>
+      ${cells.join('')}
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// 9. 下載 Excel
+// ============================================================
+function pdDownload() {
+  if (!pdAllHeaders.length || !pdCurrentClient) return;
+  const date = document.getElementById('pd-date-select').value || '';
+  const fmtId = v => { const n=Number(v); return isNaN(n)?String(v||'').trim():String(Math.round(n)); };
+  const kf  = pdCurrentTab==='shopee' ? ['商品ID','商品選項ID'] : ['商品編號','單品詳細'];
+  const k1I = pdAllHeaders.indexOf(kf[0]);
+  const k2I = pdAllHeaders.indexOf(kf[1]);
+
+  const rows = pdAllRows.map(r => {
+    const key = fmtId(r[k1I>=0?k1I:0]) + '||' + fmtId(r[k2I>=0?k2I:0]);
+    const d   = pdDailyMap[key] || {};
+    return [...r, d.stock ?? '', d.price ?? ''];
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([[...pdAllHeaders, '庫存', '現價'], ...rows]);
+  XLSX.utils.book_append_sheet(wb, ws, pdCurrentClient);
+  XLSX.writeFile(wb, `${pdCurrentClient}_${pdCurrentTab==='shopee'?'蝦皮':'Momo'}_${date}.xlsx`);
+}
+
+
+
+
+
+// 模糊比對用的 normalize（移除品牌標籤、括號、標點）
+function dbNormalize(s) {
+  s = s.replace(/【[^】]*】/g, '');
+  s = s.replace(/（[^）]*）/g, '');
+  s = s.replace(/\([^)]*\)/g, '');
+  s = s.replace(/[｜|／/\s,，。、★●◆■▲\-－買一送一]/g, '');
+  return s.toLowerCase().trim();
+}
+
+function dbSimScore(a, b) {
+  const na = dbNormalize(a), nb = dbNormalize(b);
+  if (!na || !nb) return 0;
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na];
+  if (shorter.length < 3) return 0;
+  let best = 0;
+  for (let i = 0; i < shorter.length; i++) {
+    for (let j = i + 3; j <= shorter.length; j++) {
+      if (longer.includes(shorter.slice(i, j))) best = Math.max(best, j - i);
+    }
+  }
+  return best / shorter.length;
+}
+
+// 建立模糊比對 map：以 canonical name 為 key
+function dbBuildFuzzyMap(names, threshold = 0.5) {
+  // 回傳 fn：輸入一個名稱，找出最接近的 canonical name
+  return function(queryName) {
+    let bestScore = 0, bestName = null;
+    for (const n of names) {
+      const s = dbSimScore(queryName, n);
+      if (s > bestScore) { bestScore = s; bestName = n; }
+    }
+    return bestScore >= threshold ? bestName : queryName; // 找不到就用原本名稱
+  };
+}
+// dbData structure:
+// { shopee: {'2026-05-24': [{name,orders,sales,imp,clk}...]},
+//   momo:   {'2026-05-24': [{name,orders,views,sales}...]},
+//   momoads:{'2026-05-24': [{name,imp,clk,adSales,adSpend}...]} }
+// 從 localStorage 載入資料
+let dbData = { shopee: {}, momo: {}, momoads: {} };
+try {
+  const saved = localStorage.getItem('db_data');
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    // 遷移舊格式：舊格式的 value 是 array，新格式是 {client, date, items}
+    ['shopee','momo','momoads'].forEach(p => {
+      if (!parsed[p]) return;
+      Object.entries(parsed[p]).forEach(([k, v]) => {
+        if (Array.isArray(v)) {
+          // 舊格式：key 是 'YYYY-MM-DD'，value 是 array
+          parsed[p][k] = { client: '未分類', date: k, items: v };
+        }
+      });
+    });
+    dbData = parsed;
+  }
+} catch(e) {}
+
+function dbSave() {
+  try { localStorage.setItem('db_data', JSON.stringify(dbData)); } catch(e) {
+    alert('儲存失敗：瀏覽器空間不足，請清除部分資料');
+  }
+}
+
+function dbParseDate(filename) {
+  const m = filename.match(/(\d{4})[-_\/]?(\d{2})[-_\/]?(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return null;
+}
+
+// 從檔名抓客戶名稱：取第一個 _ 前的文字
+// 例：金大器_蝦皮_20260524.xlsx → 金大器
+function dbParseClient(filename) {
+  const base = filename.replace(/\.[^.]+$/, ''); // 去副檔名
+  const parts = base.split('_');
+  // 第一段不是日期、不是平台關鍵字就是客戶名稱
+  const platformKeywords = ['蝦皮', 'shopee', 'momo', 'momoads', 'ads'];
+  if (parts.length >= 2 && !platformKeywords.some(k => parts[0].toLowerCase().includes(k)) && !/^\d+$/.test(parts[0])) {
+    return parts[0].trim();
+  }
+  return '未分類';
+}
+
+function dbParseNum(v) {
+  if (v === null || v === undefined || v === '' || v === '-' || v === '--') return 0;
+  return parseFloat(String(v).replace(/[,$\s%]/g,'')) || 0;
+}
+
+// 蝦皮 parser：parent row（規格ID為'-'或空白）才計入
+function dbParseShopee(rows) {
+  const map = {};
+  for (const row of rows) {
+    const name = String(row['商品名稱'] || '').trim();
+    if (!name) continue;
+    const skuId = String(row['商品規格ID'] || '').trim();
+    const isParent = skuId === '-' || skuId === '';
+    if (!isParent) continue;
+    if (!map[name]) map[name] = { name, orders:0, sales:0, imp:0, clk:0, cartRate:[] };
+    map[name].orders += dbParseNum(row['全部訂單']);
+    map[name].sales  += dbParseNum(row['銷售額(全部訂單) (TWD)'] || row['銷售額(全部訂單)'] || row['銷售額']);
+    map[name].imp    += dbParseNum(row['商品曝光次數']);
+    map[name].clk    += dbParseNum(row['商品點擊數']);
+    const cr = row['加入購物車轉換率'];
+    if (cr !== undefined && cr !== '' && cr !== '-') map[name].cartRate.push(dbParseNum(String(cr).replace('%','')));
+  }
+  return Object.values(map).map(p => ({
+    ...p,
+    cartRate: p.cartRate.length ? +(p.cartRate.reduce((a,b)=>a+b,0) / p.cartRate.length).toFixed(2) : null
+  }));
+}
+// Momo parser：支援舊格式（單 sheet 熱銷排行）和新格式（銷售表現＋流量表現）
+function dbParseMomo(wb) {
+  const sheetNames = wb.SheetNames;
+  const hasSales   = sheetNames.some(s => s.includes('銷售表現'));
+  const hasTraffic = sheetNames.some(s => s.includes('瀏覽量'));
+  if (hasSales || hasTraffic) return dbParseMomoNewFormat(wb, sheetNames);
+  return dbParseMomoOldFormat(wb.Sheets[sheetNames[0]]);
+}
+
+function dbFindMomoHeader(arr) {
+  for (let i = 0; i < Math.min(arr.length, 10); i++) {
+    if (arr[i] && arr[i].findIndex(v => String(v||'').trim() === '商品名稱') !== -1)
+      return { headerRow: arr[i], headerIdx: i };
+  }
+  return null;
+}
+
+function dbParseMomoOldFormat(ws) {
+  const arr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const found = dbFindMomoHeader(arr);
+  if (!found) return [];
+  const { headerRow: h, headerIdx } = found;
+  const nameIdx   = h.findIndex(v => String(v||'').trim() === '商品名稱');
+  const priceIdx  = h.findIndex(v => String(v||'').trim().includes('售價'));
+  const ordersIdx = h.findIndex(v => String(v||'').trim() === '訂購數');
+  const viewsIdx  = h.findIndex(v => String(v||'').trim().includes('瀏覽量'));
+  const salesIdx  = h.findIndex(v => String(v||'').trim().includes('訂購金額'));
+  const map = {};
+  for (let i = headerIdx + 1; i < arr.length; i++) {
+    const row = arr[i];
+    const name = String(row[nameIdx] || '').trim();
+    if (!name) continue;
+    if (!map[name]) map[name] = { name, price:0, orders:0, views:0, sales:0, stock:null };
+    map[name].price  = dbParseNum(row[priceIdx]) || map[name].price;
+    map[name].orders += dbParseNum(row[ordersIdx]);
+    map[name].views  += dbParseNum(row[viewsIdx]);
+    map[name].sales  += dbParseNum(row[salesIdx]);
+  }
+  return Object.values(map);
+}
+
+function dbParseMomoNewFormat(wb, sheetNames) {
+  const map = {};
+  const salesSheet = sheetNames.find(s => s.includes('銷售表現'));
+  if (!salesSheet) return [];
+
+  const arr = XLSX.utils.sheet_to_json(wb.Sheets[salesSheet], { header: 1, defval: '' });
+  const found = dbFindMomoHeader(arr);
+  if (!found) return [];
+
+  const { headerRow: h, headerIdx } = found;
+  const nameIdx   = h.findIndex(v => String(v||'').trim() === '商品名稱');
+  const priceIdx  = h.findIndex(v => String(v||'').trim().includes('售價'));
+  const stockIdx  = h.findIndex(v => String(v||'').trim() === '可接單量');
+  const viewsIdx  = h.findIndex(v => String(v||'').trim() === '瀏覽量');
+  const ordersIdx = h.findIndex(v => String(v||'').trim() === '訂購數');
+  const salesIdx  = h.findIndex(v => String(v||'').trim() === '訂購金額');
+
+  for (let i = headerIdx + 1; i < arr.length; i++) {
+    const row = arr[i];
+    const name = String(row[nameIdx] || '').trim();
+    if (!name) continue;
+    if (!map[name]) map[name] = { name, price:0, orders:0, views:0, sales:0, stock:null };
+    map[name].price  = dbParseNum(row[priceIdx]) || map[name].price;
+    map[name].stock  = dbParseNum(row[stockIdx]);
+    map[name].views  += dbParseNum(row[viewsIdx]);
+    map[name].orders += dbParseNum(row[ordersIdx]);
+    map[name].sales  += dbParseNum(row[salesIdx]);
+  }
+  return Object.values(map);
+}
+
+// Momo 廣告 parser
+function dbParseMomoAds(rows) {
+  const map = {};
+  for (const row of rows) {
+    const name = String(row['商品名稱'] || '').trim();
+    if (!name || name === '商品名稱') continue;
+    if (!map[name]) map[name] = { name, imp:0, clk:0, adSales:0, adSpend:0 };
+    map[name].imp     += dbParseNum(row['曝光數']);
+    map[name].clk     += dbParseNum(row['點擊數']);
+    map[name].adSales += dbParseNum(row['商品訂購金額']);
+    map[name].adSpend += dbParseNum(row['已花費']);
+  }
+  return Object.values(map);
+}
+
+// 從檔名自動判斷平台
+function dbDetectPlatform(filename) {
+  const f = filename.toLowerCase();
+  if (f.includes('momoads') || f.includes('ads')) return 'momoads';
+  if (f.includes('momo')) return 'momo';
+  if (f.includes('蝦皮') || f.includes('shopee')) return 'shopee';
+  return null;
+}
+
+function dbHandleUpload(evt) {
+  const files = Array.from(evt.target.files);
+  if (!files.length) return;
+  let done = 0;
+  files.forEach(file => {
+    const dateStr  = dbParseDate(file.name);
+    const client   = dbParseClient(file.name);
+    const platform = dbDetectPlatform(file.name);
+    if (!dateStr) {
+      alert(`無法從檔名解析日期：${file.name}\n請確認檔名含日期，如 金大器_蝦皮_20260526.xlsx`);
+      done++; if (done === files.length) dbUpdateRecords(); return;
+    }
+    if (!platform) {
+      alert(`無法判斷平台：${file.name}\n檔名需含「蝦皮」、「momo」或「momoads」`);
+      done++; if (done === files.length) dbUpdateRecords(); return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        let parsed = [];
+        if (platform === 'shopee') {
+          parsed = dbParseShopee(XLSX.utils.sheet_to_json(ws, { defval: '' }));
+        } else if (platform === 'momo') {
+          parsed = dbParseMomo(wb);
+        } else {
+          parsed = dbParseMomoAds(XLSX.utils.sheet_to_json(ws, { defval: '' }));
+        }
+        const key = `${client}__${dateStr}`;
+        if (!dbData[platform][key]) dbData[platform][key] = { client, date: dateStr, items: [] };
+        const existing = dbData[platform][key].items;
+        parsed.forEach(item => {
+          const found = existing.find(e => e.name === item.name);
+          if (found) { Object.keys(item).forEach(k => { if (k !== 'name') found[k] = (found[k]||0) + item[k]; }); }
+          else existing.push({...item});
+        });
+      } catch(err) { alert(`解析失敗：${file.name}\n${err.message}`); }
+      done++;
+      if (done === files.length) { dbSave(); dbUpdateRecords(); dbRender(); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+  evt.target.value = '';
+}
+
+function dbUpdateRecords() {
+  const list = document.getElementById('db-records-list');
+  const allEntries = [
+    ...Object.entries(dbData.shopee).map(([k,v]) => ({key:k, p:'shopee', label:'🦐 蝦皮', client:v.client, date:v.date})),
+    ...Object.entries(dbData.momo).map(([k,v]) => ({key:k, p:'momo', label:'🛍️ Momo', client:v.client, date:v.date})),
+    ...Object.entries(dbData.momoads).map(([k,v]) => ({key:k, p:'momoads', label:'📣 廣告', client:v.client, date:v.date})),
+  ].sort((a,b) => (a.date||'').localeCompare(b.date||'') || (a.client||'').localeCompare(b.client||''));
+
+  if (!allEntries.length) { list.innerHTML = '<div class="db-empty-records">尚未上傳任何資料</div>'; dbUpdateClientFilter([]); return; }
+
+  list.innerHTML = allEntries.map(({key,p,label,client,date}) =>
+    `<span class="db-record-tag ${p==='shopee'?'shopee':'momo'}" style="${p==='momoads'?'border-color:#f5cba7;background:#fef9f0;color:#e67e22':''}">
+      ${label} ${client} ${date}
+      <button class="db-record-del" onclick="dbDeleteRecord('${p}','${key}')">✕</button>
+    </span>`
+  ).join('');
+
+  // 更新日期範圍
+  const dates = allEntries.map(x=>x.date).sort();
+  const fromEl = document.getElementById('db-date-from');
+  const toEl   = document.getElementById('db-date-to');
+  if (!fromEl.value) fromEl.value = dates[0];
+  if (!toEl.value)   toEl.value   = dates[dates.length-1];
+
+  // 更新客戶清單
+  const clients = [...new Set(allEntries.map(x=>x.client))].sort();
+  dbUpdateClientFilter(clients);
+}
+
+function dbUpdateClientFilter(clients) {
+  const wrap = document.getElementById('db-client-filter-wrap');
+  const sel  = document.getElementById('db-client-select');
+  if (!clients.length) { wrap.style.display='none'; return; }
+  wrap.style.display = 'flex';
+  const current = sel.value;
+  sel.innerHTML = '<option value="">全部客戶</option>' +
+    clients.map(c => `<option value="${c}" ${c===current?'selected':''}>${c}</option>`).join('');
+}
+
+function dbDeleteRecord(platform, key) {
+  delete dbData[platform][key];
+  dbSave(); dbUpdateRecords(); dbRender();
+}
+
+function dbClearAll() {
+  if (!confirm('確定清除所有資料？')) return;
+  dbData = { shopee: {}, momo: {}, momoads: {} };
+  dbSave(); dbUpdateRecords(); dbRender();
+}
+
+function dbResetFilter() {
+  const dates = [
+    ...Object.values(dbData.shopee).map(v=>v.date),
+    ...Object.values(dbData.momo).map(v=>v.date),
+    ...Object.values(dbData.momoads).map(v=>v.date)
+  ].sort();
+  document.getElementById('db-date-from').value = dates[0] || '';
+  document.getElementById('db-date-to').value   = dates[dates.length-1] || '';
+  const sel = document.getElementById('db-client-select');
+  if (sel) sel.value = '';
+  dbRender();
+}
+
+let dbTableData = [];
+
+function dbRender() {
+  const from   = document.getElementById('db-date-from').value;
+  const to     = document.getElementById('db-date-to').value;
+  const client = document.getElementById('db-client-select')?.value || '';
+
+  const agg = (src) => {
+    const map = {};
+    Object.values(src).forEach(({client: c, date, items}) => {
+      if (from && date < from) return;
+      if (to   && date > to)   return;
+      if (client && c !== client) return;
+      items.forEach(item => {
+        if (!map[item.name]) map[item.name] = {};
+        Object.keys(item).forEach(k => { if (k !== 'name') map[item.name][k] = (map[item.name][k]||0) + item[k]; });
+      });
+    });
+    return map;
+  };
+  const sMap  = agg(dbData.shopee);
+  const mMap  = agg(dbData.momo);
+  const maMap = agg(dbData.momoads);
+
+  // 以蝦皮名稱為基準做模糊比對，把 Momo 名稱對應到蝦皮的 key
+  const shopeeNames = Object.keys(sMap);
+  const momoNames   = Object.keys(mMap);
+  const momoAdsNames = Object.keys(maMap);
+
+  // 建立 Momo→蝦皮 的名稱對應
+  function fuzzyMap(sourceNames, targetNames, threshold) {
+    const result = {};
+    for (const src of sourceNames) {
+      let bestScore = 0, bestTarget = null;
+      for (const tgt of targetNames) {
+        const s = dbSimScore(src, tgt);
+        if (s > bestScore) { bestScore = s; bestTarget = tgt; }
+      }
+      result[src] = bestScore >= threshold ? bestTarget : src;
+    }
+    return result;
+  }
+
+  const mToS  = shopeeNames.length ? fuzzyMap(momoNames, shopeeNames, 0.45) : {};
+  const maToS = shopeeNames.length ? fuzzyMap(momoAdsNames, shopeeNames, 0.45) : {};
+
+  // 以 canonical key（蝦皮名稱優先）合併
+  const mergedMap = {};
+  // 先放蝦皮
+  for (const [n, v] of Object.entries(sMap)) {
+    mergedMap[n] = { s: v, m: null, ma: null };
+  }
+  // 放 Momo 熱銷
+  for (const [n, v] of Object.entries(mMap)) {
+    const key = mToS[n] || n;
+    if (!mergedMap[key]) mergedMap[key] = { s: null, m: null, ma: null };
+    if (mergedMap[key].m) {
+      // 加總（同 key 多筆）
+      Object.keys(v).forEach(k => { mergedMap[key].m[k] = (mergedMap[key].m[k]||0) + v[k]; });
+    } else {
+      mergedMap[key].m = {...v};
+    }
+  }
+  // 放 Momo 廣告
+  for (const [n, v] of Object.entries(maMap)) {
+    const key = maToS[n] || n;
+    if (!mergedMap[key]) mergedMap[key] = { s: null, m: null, ma: null };
+    if (mergedMap[key].ma) {
+      Object.keys(v).forEach(k => { mergedMap[key].ma[k] = (mergedMap[key].ma[k]||0) + v[k]; });
+    } else {
+      mergedMap[key].ma = {...v};
+    }
+  }
+
+  dbTableData = Object.entries(mergedMap).map(([name, {s,m,ma}]) => ({name,s,m,ma}))
+    .sort((a,b) => ((b.s?.sales||0)+(b.m?.sales||0)) - ((a.s?.sales||0)+(a.m?.sales||0)));
+
+  // KPI
+  const tv = (map, k) => Object.values(map).reduce((s,r)=>s+(r[k]||0),0);
+  document.getElementById('db-k-s-sales').textContent   = tv(sMap,'sales')    ? '$'+tv(sMap,'sales').toLocaleString('zh-TW')    : '—';
+  document.getElementById('db-k-s-orders').textContent  = tv(sMap,'orders')   ? tv(sMap,'orders').toLocaleString('zh-TW')        : '—';
+  document.getElementById('db-k-m-sales').textContent   = tv(mMap,'sales')    ? '$'+tv(mMap,'sales').toLocaleString('zh-TW')     : '—';
+  document.getElementById('db-k-m-orders').textContent  = tv(mMap,'orders')   ? tv(mMap,'orders').toLocaleString('zh-TW')        : '—';
+  document.getElementById('db-k-ma-sales').textContent  = tv(maMap,'adSales') ? '$'+tv(maMap,'adSales').toLocaleString('zh-TW')  : '—';
+  document.getElementById('db-k-ma-spend').textContent  = tv(maMap,'adSpend') ? '$'+tv(maMap,'adSpend').toLocaleString('zh-TW')  : '—';
+
+  document.getElementById('db-filter-info').textContent =
+    from && to ? `${from} ～ ${to}，共 ${dbTableData.length} 項商品` : '';
+  dbRenderTable(dbTableData);
+}
+
+function dbFmt(n)      { return (n && n > 0) ? n.toLocaleString('zh-TW') : '<span style="color:#ddd">—</span>'; }
+function dbFmtM(n)     { return (n && n > 0) ? '$'+n.toLocaleString('zh-TW') : '<span style="color:#ddd">—</span>'; }
+function dbFmtF(n)     { return (n && n > 0) ? n.toLocaleString('zh-TW', {minimumFractionDigits:0,maximumFractionDigits:2}) : '<span style="color:#ddd">—</span>'; }
+
+function dbRenderTable(data) {
+  const tbody = document.getElementById('db-tbody');
+  document.getElementById('db-row-count').textContent = data.length ? `共 ${data.length} 項` : '';
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="12" class="db-no-data">無資料，請上傳檔案或調整日期區間</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(row => {
+    const s = row.s, m = row.m, ma = row.ma;
+    return `<tr>
+      <td class="name-col">${row.name}</td>
+      <td class="shopee-col">${dbFmt(s?.orders)}</td>
+      <td class="shopee-col">${dbFmtM(s?.sales)}</td>
+      <td class="shopee-col">${s?.orders ? dbFmtM(Math.round(s.sales / s.orders)) : '<span style="color:#ddd">—</span>'}</td>
+      <td class="shopee-col">${dbFmt(s?.imp)}</td>
+      <td class="shopee-col">${dbFmt(s?.clk)}</td>
+      <td class="shopee-col">${s?.cartRate != null ? s.cartRate + '%' : '<span style="color:#ddd">—</span>'}</td>
+      <td class="momo-col">${m?.price ? dbFmtM(m.price) : '<span style="color:#ddd">—</span>'}</td>
+      <td class="momo-col">${m?.stock != null ? dbFmt(m.stock) : '<span style="color:#ddd">—</span>'}</td>
+      <td class="momo-col">${dbFmt(m?.orders)}</td>
+      <td class="momo-col">${dbFmt(m?.views)}</td>
+      <td class="momo-col">${dbFmtM(m?.sales)}</td>
+      <td class="momo-col">${dbFmt(ma?.imp)}</td>
+      <td class="momo-col">${dbFmt(ma?.clk)}</td>
+      <td class="momo-col">${dbFmtM(ma?.adSales)}</td>
+      <td class="momo-col">${dbFmtF(ma?.adSpend)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function dbFilterTable(q) {
+  if (!q.trim()) { dbRenderTable(dbTableData); return; }
+  dbRenderTable(dbTableData.filter(r => r.name.toLowerCase().includes(q.toLowerCase())));
+}
+
+function dbDownload() {
+  if (!dbTableData.length) return;
+  const from = document.getElementById('db-date-from').value;
+  const to   = document.getElementById('db-date-to').value;
+  const headers = ['商品名稱','蝦皮_訂單量','蝦皮_銷售額','蝦皮_售價','蝦皮_曝光','蝦皮_點擊','蝦皮_轉換率',
+    'Momo_售價','Momo_庫存','Momo_訂購數','Momo_瀏覽量','Momo_訂購金額',
+    'Momo廣告_曝光數','Momo廣告_點擊數','Momo廣告_廣告收入','Momo廣告_廣告支出'];
+  const rows = [headers];
+  const v = x => x ?? 0;
+  dbTableData.forEach(({name,s,m,ma}) => {
+    rows.push([
+      name,
+      v(s?.orders), v(s?.sales), s?.orders ? Math.round(s.sales/s.orders) : '',
+      v(s?.imp), v(s?.clk), s?.cartRate != null ? s.cartRate+'%' : '',
+      v(m?.price), m?.stock != null ? m.stock : '', v(m?.orders), v(m?.views), v(m?.sales),
+      v(ma?.imp), v(ma?.clk), v(ma?.adSales), v(ma?.adSpend)
+    ]);
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:55},{wch:10},{wch:12},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Dashboard');
+  XLSX.writeFile(wb, `Dashboard_${from||'all'}_${to||'all'}.xlsx`);
+}
+</script>
+
+<!-- ============================================================
+     SHOPEE SCRIPT
+============================================================ -->
+<script>
+// ============================================================
+// 蝦皮資料分析 JS（Google Drive 版）
+// ============================================================
+let shopeeApiUrl = '';
+let shopeeCurrentClient = null;
+let shopeeClients = [];
+let shopeeAllRows = [];   // 本期資料
+let shopeePrevMap = {};   // 前期資料 id → row
+let shopeeSortField = 'orders';
+let shopeeSortDir = -1;
+
+try { shopeeApiUrl = localStorage.getItem('shopee_analysis_api_url') || ''; } catch(e) {}
+
+const SHOPEE_COLS = [
+  { key: 'name',    label: '商品名稱', align: 'left',  minW: '200px' },
+  { key: 'orders',  label: '訂單量',   align: 'right' },
+  { key: 'sales',   label: '銷售額',   align: 'right' },
+  { key: 'impr',    label: '曝光',     align: 'right' },
+  { key: 'clicks',  label: '點擊',     align: 'right' },
+  { key: 'cart',    label: '加入購物車', align: 'right' },
+  { key: 'convRate',label: '轉換率',   align: 'right' },
+];
+
+function shopeeSaveApiUrl() {
+  const v = (document.getElementById('shopee-api-url').value || '').trim();
+  if (!v) { alert('請輸入 Apps Script Web App 網址'); return; }
+  shopeeApiUrl = v;
+  try { localStorage.setItem('shopee_analysis_api_url', v); } catch(e) {}
+  document.getElementById('shopee-api-status').textContent = '✅ 已儲存';
+  setTimeout(() => document.getElementById('shopee-api-status').textContent = '', 2000);
+  shopeeInit();
+}
+
+async function shopeeCallApi(params) {
+  const url = shopeeApiUrl + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+function shopeeSetStatus(msg) {
+  const el = document.getElementById('shopee-status-msg');
+  if (el) el.textContent = msg;
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+async function shopeeInit() {
+  const urlInput = document.getElementById('shopee-api-url');
+  if (urlInput && shopeeApiUrl) urlInput.value = shopeeApiUrl;
+
+  if (pdClients && pdClients.length) {
+    shopeeClients = pdClients.filter(c => c.platforms && c.platforms.shopee);
+    shopeeRenderClientList();
+    return;
+  }
+  if (!shopeeApiUrl) { shopeeSetStatus('請先輸入 Apps Script 網址'); return; }
+  try {
+    const data = await shopeeCallApi({ action: 'getClients' });
+    shopeeClients = (data.clients || []).filter(c => c.platforms && c.platforms.shopee);
+    shopeeRenderClientList();
+  } catch(e) {
+    shopeeSetStatus('❌ 載入失敗：' + e.message);
+  }
+}
+
+function shopeeRenderClientList() {
+  const wrap = document.getElementById('shopee-client-list');
+  if (!wrap) return;
+  if (!shopeeClients.length) {
+    wrap.innerHTML = '<span style="font-size:12px;color:var(--text3);">尚無蝦皮廠商</span>';
+    return;
+  }
+  wrap.innerHTML = shopeeClients.map(c => {
+    const isActive = c.name === shopeeCurrentClient;
+    return `<button onclick="shopeeSelectClient('${c.name}')"
+      style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:${isActive?'600':'400'};cursor:pointer;font-family:inherit;
+             border:1px solid ${isActive?'var(--shopee)':'var(--glass-border)'};
+             background:${isActive?'rgba(255,98,64,0.12)':'transparent'};
+             color:${isActive?'var(--shopee)':'var(--text2)'};transition:all .15s;">
+      ${c.name}
+    </button>`;
+  }).join('') + `<select class="mobile-client-select" onchange="shopeeSelectClient(this.value)">
+    <option value="">請選擇廠商</option>
+    ${shopeeClients.map(c => `<option value="${c.name}" ${c.name===shopeeCurrentClient?'selected':''}>${c.name}</option>`).join('')}
+  </select>`;
+}
+
+function shopeeSelectClient(name) {
+  shopeeCurrentClient = name;
+  shopeeRenderClientList();
+  shopeeAllRows = [];
+  shopeePrevMap = {};
+  shopeeRenderThead();
+  shopeeRenderTable([]);
+  document.getElementById('shopee-kpi-row').style.display = 'none';
+  document.getElementById('shopee-dl-btn').style.display = 'none';
+  shopeeSetStatus('已選擇：' + name + '，請設定日期區間後點「套用」');
+}
+
+// ============================================================
+// 載入資料
+// ============================================================
+async function shopeeLoadData() {
+  if (!shopeeCurrentClient) { shopeeSetStatus('請先選擇廠商'); return; }
+  if (!shopeeApiUrl) { shopeeSetStatus('請先設定 Apps Script 網址'); return; }
+
+  const from     = document.getElementById('shopee-date-from').value;
+  const to       = document.getElementById('shopee-date-to').value;
+  const prevFrom = document.getElementById('shopee-prev-from').value;
+  const prevTo   = document.getElementById('shopee-prev-to').value;
+  if (!from || !to) { shopeeSetStatus('請設定日期區間'); return; }
+  if (from > to)    { shopeeSetStatus('開始日期不能晚於結束日期'); return; }
+
+  const hasPrev = prevFrom && prevTo && prevFrom <= prevTo;
+  shopeeSetStatus('載入中…');
+  shopeeAllRows = [];
+  shopeePrevMap = {};
+  document.getElementById('shopee-kpi-row').style.display = 'none';
+  document.getElementById('shopee-dl-btn').style.display = 'none';
+
+  try {
+    const datesData = await shopeeCallApi({ action: 'getShopeeSalesDates', client: shopeeCurrentClient });
+    const allDates  = (datesData.dates || []).filter(d => d >= from && d <= to).sort();
+
+    if (!allDates.length) {
+      shopeeSetStatus('此日期區間無資料');
+      document.getElementById('shopee-date-hint').textContent = '此區間無每日銷售檔';
+      return;
+    }
+    document.getElementById('shopee-date-hint').textContent = `找到 ${allDates.length} 天資料`;
+
+    // 合併本期
+    const salesMap = {};
+    for (const date of allDates) {
+      shopeeSetStatus(`載入 ${date}…`);
+      try {
+        const res = await shopeeCallApi({ action: 'getShopeeSales', client: shopeeCurrentClient, date });
+        if (res.b64) shopeeParseB64(res.b64).forEach(r => {
+          if (!salesMap[r.id]) salesMap[r.id] = { name: r.name, orders: 0, sales: 0, impr: 0, clicks: 0, cart: 0, convRateSum: 0, convRateCount: 0 };
+          salesMap[r.id].orders        += r.orders || 0;
+          salesMap[r.id].sales         += r.sales  || 0;
+          salesMap[r.id].impr          += r.impr   || 0;
+          salesMap[r.id].clicks        += r.clicks || 0;
+          salesMap[r.id].cart          += r.cart   || 0;
+          if (r.convRate != null) { salesMap[r.id].convRateSum += r.convRate; salesMap[r.id].convRateCount++; }
+        });
+      } catch(e) { console.warn(date, e); }
+    }
+
+    shopeeAllRows = Object.entries(salesMap).map(([id, s]) => ({
+      id, name: s.name,
+      orders:   s.orders,
+      sales:    s.sales,
+      impr:     s.impr,
+      clicks:   s.clicks,
+      cart:     s.cart,
+      convRate: s.orders > 0 ? s.cart / s.orders : null,
+    }));
+
+    // 載入前期
+    if (hasPrev) {
+      shopeeSetStatus('載入前期資料…');
+      const prevDatesData = await shopeeCallApi({ action: 'getShopeeSalesDates', client: shopeeCurrentClient });
+      const prevDates = (prevDatesData.dates || []).filter(d => d >= prevFrom && d <= prevTo).sort();
+      const prevMap2 = {};
+      for (const date of prevDates) {
+        try {
+          const res = await shopeeCallApi({ action: 'getShopeeSales', client: shopeeCurrentClient, date });
+          if (res.b64) shopeeParseB64(res.b64).forEach(r => {
+            if (!prevMap2[r.id]) prevMap2[r.id] = { orders: 0, sales: 0, impr: 0, clicks: 0, cart: 0 };
+            prevMap2[r.id].orders += r.orders || 0;
+            prevMap2[r.id].sales  += r.sales  || 0;
+            prevMap2[r.id].impr   += r.impr   || 0;
+            prevMap2[r.id].clicks += r.clicks || 0;
+            prevMap2[r.id].cart   += r.cart   || 0;
+          });
+        } catch(e) {}
+      }
+      shopeePrevMap = {};
+      Object.entries(prevMap2).forEach(([id, s]) => {
+        shopeePrevMap[id] = { ...s, convRate: s.orders > 0 ? s.cart / s.orders : null };
+      });
+    }
+
+    shopeeSortField = 'orders'; shopeeSortDir = -1;
+    shopeeSetStatus(`共 ${shopeeAllRows.length} 筆，${allDates.length} 天合計${hasPrev ? '　有前期對比' : ''}`);
+    shopeeUpdateKpi();
+    shopeeRenderThead();
+    document.getElementById('shopee-kpi-row').style.display = 'grid';
+    document.getElementById('shopee-dl-btn').style.display = 'inline-block';
+    shopeeFilterTable(document.getElementById('shopee-search').value || '');
+
+  } catch(e) {
+    shopeeSetStatus('❌ 載入失敗：' + e.message);
+  }
+}
+
+// ============================================================
+// 解析 base64 xlsx（只取 parent 列：商品規格ID = "-"）
+// ============================================================
+function shopeeParseB64(b64) {
+  const wb  = XLSX.read(b64, { type: 'base64' });
+  const arr = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+
+  // 找 header 列（含「商品ID」）
+  let hIdx = -1;
+  for (let i = 0; i < Math.min(arr.length, 10); i++) {
+    if (arr[i].map(v => String(v||'').trim()).includes('商品ID')) { hIdx = i; break; }
+  }
+  if (hIdx === -1) return [];
+
+  const headers = arr[hIdx].map(v => String(v||'').trim());
+  const ci = k => headers.indexOf(k);
+  // 處理逗號數字、百分比、破折號
+  const toNum = v => {
+    const s = String(v||'').trim().replace(/,/g, '');
+    if (s === '-' || s === '' || s === '—') return 0;
+    const n = parseFloat(s.replace(/%/g, ''));
+    return isNaN(n) ? 0 : n;
+  };
+
+  const idI   = ci('商品ID');
+  const nmI   = ci('商品名稱');
+  const skuI  = ci('商品規格ID');
+  const ordI  = ci('可出貨訂單');
+  const salI  = ci('銷售額(可出貨訂單) (TWD)');
+  const impI  = ci('商品曝光次數');
+  const clkI  = ci('商品點擊數');
+  const cartI = ci('加入購物車(件數)');
+  const cvI   = ci('加入購物車轉換率');
+
+  const rows = [];
+  for (let i = hIdx + 1; i < arr.length; i++) {
+    const r   = arr[i];
+    const id  = String(r[idI] || '').trim();
+    if (!id || id === '商品ID') continue;
+
+    const sku = String(r[skuI] || '').trim();
+    // parent 列：規格ID 是 "-" 或純數字商品（無規格）
+    // 只有當規格ID是 "-" 才是 parent
+    if (sku !== '-') continue;
+
+    rows.push({
+      id,
+      name:     String(r[nmI] || '').trim(),
+      orders:   toNum(r[ordI]),
+      sales:    toNum(r[salI]),
+      impr:     toNum(r[impI]),
+      clicks:   toNum(r[clkI]),
+      cart:     toNum(r[cartI]),
+      convRate: cvI >= 0 && String(r[cvI]||'').trim() !== '-' ? toNum(r[cvI]) / 100 : null,
+    });
+  }
+  return rows;
+}
+
+// ============================================================
+// KPI
+// ============================================================
+function shopeeUpdateKpi() {
+  const sum = f => shopeeAllRows.reduce((a, r) => a + (r[f] || 0), 0);
+  const fmt = n => '$' + Math.round(n).toLocaleString('zh-TW');
+  document.getElementById('shopee-kpi-orders').textContent = sum('orders').toLocaleString('zh-TW');
+  document.getElementById('shopee-kpi-sales').textContent  = fmt(sum('sales'));
+  document.getElementById('shopee-kpi-impr').textContent   = sum('impr').toLocaleString('zh-TW');
+  document.getElementById('shopee-kpi-clicks').textContent = sum('clicks').toLocaleString('zh-TW');
+}
+
+// ============================================================
+// 表頭排序
+// ============================================================
+function shopeeRenderThead() {
+  const tr = document.getElementById('shopee-thead-row');
+  if (!tr) return;
+  tr.innerHTML = SHOPEE_COLS.map(col => {
+    const isActive = col.key === shopeeSortField;
+    const arrow = isActive ? (shopeeSortDir === -1 ? ' ↓' : ' ↑') : ' ↕';
+    const clr = isActive ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)';
+    return `<th onclick="shopeeSortBy('${col.key}')"
+      style="padding:9px 12px;font-size:11px;font-weight:600;color:${clr};
+             background:rgba(255,255,255,0.06);border-bottom:1px solid rgba(255,255,255,0.1);
+             text-align:${col.align};white-space:nowrap;cursor:pointer;user-select:none;
+             ${col.minW?'min-width:'+col.minW+';':''}">
+      ${col.label}<span style="font-size:10px;opacity:${isActive?1:.5};">${arrow}</span>
+    </th>`;
+  }).join('');
+}
+
+function shopeeSortBy(field) {
+  if (shopeeSortField === field) shopeeSortDir *= -1;
+  else { shopeeSortField = field; shopeeSortDir = -1; }
+  shopeeRenderThead();
+  shopeeFilterTable(document.getElementById('shopee-search').value || '');
+}
+
+// ============================================================
+// 搜尋 + 渲染
+// ============================================================
+function shopeeFilterTable(q) {
+  let rows = [...shopeeAllRows];
+  if (q && q.trim()) rows = rows.filter(r => r.name.toLowerCase().includes(q.toLowerCase()) || r.id.includes(q));
+  rows.sort((a, b) => ((a[shopeeSortField] ?? -1) - (b[shopeeSortField] ?? -1)) * shopeeSortDir);
+  document.getElementById('shopee-row-count').textContent = rows.length ? `共 ${rows.length} 筆` : '';
+  shopeeRenderTable(rows);
+}
+
+function shopeeRenderTable(rows) {
+  const tbody = document.getElementById('shopee-tbody');
+  const hasPrev = Object.keys(shopeePrevMap).length > 0;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="padding:50px;text-align:center;color:var(--text3);">${shopeeAllRows.length ? '無符合條件的商品' : '請選擇廠商與日期區間'}</td></tr>`;
+    return;
+  }
+
+  const tdB = 'padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.07);';
+  const tdL = tdB + 'color:rgba(255,255,255,0.88);';
+  const tdR = tdB + 'text-align:right;color:rgba(255,255,255,0.82);';
+  const fmt    = n => n != null ? '$' + Math.round(n).toLocaleString('zh-TW') : '—';
+  const fmtN   = n => n != null ? Math.round(n).toLocaleString('zh-TW') : '—';
+  const fmtPct = n => n != null ? (n * 100).toFixed(1) + '%' : '—';
+
+  const mkCell = (val, prevVal, label, fmtFn, style) => {
+    if (!hasPrev || prevVal == null) return `<td style="${style}">${fmtFn(val)}</td>`;
+    const diff = val != null && prevVal != null ? val - prevVal : null;
+    const pct  = diff != null && prevVal > 0 ? (diff / prevVal * 100).toFixed(1) : null;
+    const arrow = diff == null ? '' : diff > 0 ? ' ▲' : diff < 0 ? ' ▼' : '';
+    const clr   = diff == null ? '' : diff > 0 ? '#f07070' : diff < 0 ? '#3ecfaa' : '';
+    const tt = `前期：${fmtFn(prevVal)}　${arrow}${diff!=null?Math.abs(diff).toLocaleString('zh-TW'):''}${pct?' ('+Math.abs(pct)+'%)':''}`;
+    return `<td style="${style}cursor:default;" class="shopee-tt-cell" data-tt="${tt}" data-clr="${clr}">${fmtFn(val)}</td>`;
+  };
+
+  tbody.innerHTML = rows.map(r => {
+    const p = shopeePrevMap[r.id] || null;
+    return `<tr style="transition:background .13s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
+      <td style="${tdL}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.name}">${r.name}</td>
+      ${mkCell(r.orders,   p?.orders,   '訂單量',   fmtN,   tdR+'font-weight:500;')}
+      ${mkCell(r.sales,    p?.sales,    '銷售額',   fmt,    tdR)}
+      ${mkCell(r.impr,     p?.impr,     '曝光',     fmtN,   tdR)}
+      ${mkCell(r.clicks,   p?.clicks,   '點擊',     fmtN,   tdR)}
+      ${mkCell(r.cart,     p?.cart,     '加入購物車', fmtN, tdR)}
+      ${mkCell(r.convRate, p?.convRate, '轉換率',   fmtPct, tdR)}
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// 下載 Excel
+// ============================================================
+function shopeeDownload() {
+  if (!shopeeAllRows.length || !shopeeCurrentClient) return;
+  const from = document.getElementById('shopee-date-from').value;
+  const to   = document.getElementById('shopee-date-to').value;
+  const headers = ['商品名稱', '訂單量', '銷售額', '曝光', '點擊', '加入購物車', '轉換率(%)'];
+  const rows = [...shopeeAllRows]
+    .sort((a, b) => (b[shopeeSortField]||0) - (a[shopeeSortField]||0))
+    .map(r => [r.name, r.orders, Math.round(r.sales), r.impr, r.clicks, r.cart,
+               r.convRate != null ? parseFloat((r.convRate*100).toFixed(1)) : '']);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:50},{wch:8},{wch:12},{wch:10},{wch:8},{wch:12},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws, shopeeCurrentClient);
+  XLSX.writeFile(wb, `蝦皮_${shopeeCurrentClient}_${from}_${to}.xlsx`);
+}
+
+// Shopee tooltip
+(function() {
+  const tt = document.getElementById('shopee-tt');
+  if (!tt) return;
+  document.addEventListener('mouseover', function(e) {
+    const cell = e.target.closest('.shopee-tt-cell[data-tt]');
+    if (!cell) return;
+    const clr = cell.dataset.clr || 'rgba(255,255,255,0.88)';
+    tt.innerHTML = `<span style="color:${clr}">${cell.dataset.tt}</span>`;
+    tt.style.display = 'block';
+    const rect = cell.getBoundingClientRect();
+    let top = rect.top - tt.offsetHeight - 8;
+    let left = rect.left;
+    if (top < 8) top = rect.bottom + 8;
+    if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+    tt.style.top  = top  + 'px';
+    tt.style.left = left + 'px';
+  });
+  document.addEventListener('mouseout', function(e) {
+    const cell = e.target.closest('.shopee-tt-cell[data-tt]');
+    if (!cell) return;
+    if (!cell.contains(e.relatedTarget)) tt.style.display = 'none';
+  });
+})();
+</script>
+
+<!-- ============================================================
+     MOMO SCRIPT
+============================================================ -->
+<script>
+// Momo store
+const mStore = { 'prev-hot': null, 'prev-ad': null, 'curr-hot': null, 'curr-ad': null };
+
+function mEscHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function mFmt(n) {
+  if (!n && n !== 0) return '—';
+  if (n >= 1e8) return (n/1e8).toFixed(2) + '億';
+  if (n >= 1e4) return (n/1e4).toFixed(1) + '萬';
+  return n.toLocaleString('zh-TW');
+}
+function mFmtNum(n, format) {
+  if (n === null || n === undefined) return '—';
+  if (format === 'money') return '$' + n.toLocaleString('zh-TW');
+  if (format === 'roas') return n.toFixed(2);
+  return n.toLocaleString('zh-TW');
+}
+
+function mDetectCol(headers, candidates) {
+  for (const c of candidates) { const found = headers.find(h => String(h).includes(c)); if (found) return found; }
+  return null;
+}
+function mDetectNameCol(headers, data) {
+  let nameCol = mDetectCol(headers, ['商品名稱','商品名','品名','名稱','標題','商品標題','規格名','product','name','item','title','sku']);
+  if (!nameCol) {
+    for (const h of headers) {
+      const samples = data.slice(0, Math.min(8, data.length)).map(r => String(r[h] || '').trim());
+      const nonEmpty = samples.filter(v => v !== '');
+      const textCount = nonEmpty.filter(v => isNaN(v.replace(/,/g,'').replace(/\./g,''))).length;
+      if (nonEmpty.length > 0 && textCount / nonEmpty.length >= 0.6) { nameCol = h; break; }
+    }
+  }
+  return nameCol || headers[0];
+}
+function mBuildHotColMap(data) {
+  if (!data || data.length === 0) return null;
+  const headers = Object.keys(data[0]);
+  return { name: mDetectNameCol(headers, data), orders: mDetectCol(headers, ['訂購數','訂購件數','訂單數']) || null, views: mDetectCol(headers, ['瀏覽量','瀏覽','views','流量','瀏覽次數','瀏覽人數']) || null, sales: mDetectCol(headers, ['訂購金額','銷售額','金額','sales','revenue','訂購','銷售金額','營業額','成交金額']) || null };
+}
+function mBuildAdColMap(data) {
+  if (!data || data.length === 0) return null;
+  const headers = Object.keys(data[0]);
+  return {
+    name:        mDetectNameCol(headers, data),
+    impressions: mDetectCol(headers, ['曝光數','曝光','impressions','impression','曝光次數']) || null,
+    clicks:      mDetectCol(headers, ['點擊數','點擊','clicks','click','點擊次數']) || null,
+    roas:        mDetectCol(headers, ['投入產出比','投產比','ROAS','roas','roi','ROI','產出比']) || null,
+    adSales:     mDetectCol(headers, ['商品訂購金額','廣告商品訂購金額','廣告訂購金額','ad sales','ad_sales']) || null,
+    adSpend:     mDetectCol(headers, ['已花費','花費','spend','cost','支出','廣告費用','費用']) || null,
+  };
+}
+function mBuildColMap(data) {
+  if (!data || data.length === 0) return null;
+  const headers = Object.keys(data[0]);
+  return {
+    name:   mDetectNameCol(headers, data),
+    sales:  mDetectCol(headers, ['訂購金額','銷售額','金額','sales','revenue','訂購','銷售金額','營業額','成交金額']) || null,
+    views:  mDetectCol(headers, ['瀏覽量','瀏覽','views','流量','瀏覽次數']) || null,
+    impressions: mDetectCol(headers, ['曝光數','曝光','impressions','impression']) || null,
+    clicks: mDetectCol(headers, ['點擊數','點擊','clicks','click']) || null,
+    roas:   mDetectCol(headers, ['投入產出比','投產比','ROAS','roas','roi']) || null,
+    adSales:mDetectCol(headers, ['商品訂購金額','廣告商品訂購金額','廣告訂購金額']) || null,
+  };
+}
+function mGetNum(row, col) {
+  if (!col) return null;
+  const v = row[col];
+  if (v === '' || v === null || v === undefined) return null;
+  const n = parseFloat(String(v).replace(/,/g,''));
+  return isNaN(n) ? null : n;
+}
+function mBuildHotMap(data) {
+  if (!data) return {};
+  const cm = mBuildHotColMap(data); if (!cm) return {};
+  const map = {};
+  data.forEach(r => {
+    const name = String(r[cm.name] || '').trim();
+    if (!name || name === cm.name) return;
+    map[name] = { name, orders: mGetNum(r, cm.orders), views: mGetNum(r, cm.views), sales: mGetNum(r, cm.sales) };
+  });
+  return map;
+}
+function mBuildAdMap(data) {
+  if (!data) return {};
+  const cm = mBuildAdColMap(data); if (!cm) return {};
+  const map = {};
+  data.forEach(r => {
+    const name = String(r[cm.name] || '').trim();
+    if (!name || name === cm.name) return;
+    map[name] = { name, impressions: mGetNum(r, cm.impressions), clicks: mGetNum(r, cm.clicks), roas: mGetNum(r, cm.roas), adSales: mGetNum(r, cm.adSales), adSpend: mGetNum(r, cm.adSpend) };
+  });
+  return map;
+}
+function mMergeHotAd(hotMap, adMap) {
+  const allNames = new Set([...Object.keys(hotMap), ...Object.keys(adMap)]);
+  const result = [];
+  allNames.forEach(name => {
+    const h = hotMap[name] || {}, a = adMap[name] || {};
+    result.push({ name, orders: h.orders??null, views: h.views??null, sales: h.sales??null, impressions: a.impressions??null, clicks: a.clicks??null, roas: a.roas??null, adSales: a.adSales??null, adSpend: a.adSpend??null });
+  });
+  return result;
+}
+
+function mFindHeaderRow(ws) {
+  const keywordSet = new Set(['商品名稱','商品名','品名','名稱','曝光數','點擊數','瀏覽量','訂購金額','投入產出比','商品訂購金額']);
+  const ref = ws['!ref']; if (!ref) return 0;
+  const range = XLSX.utils.decode_range(ref);
+  for (let R = range.s.r; R <= Math.min(range.s.r + 15, range.e.r); R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (cell && cell.v && keywordSet.has(String(cell.v).trim())) return R;
+    }
+  }
+  return 0;
+}
+
+// ============================================================
+// MOMO 資料分析 JS（Google Drive 版）
+// ============================================================
+let momoApiUrl = '';
+let momoCurrentClient = null;
+let momoClients = [];
+let momoAllRows = [];    // 本期完整資料
+let momoPrevMap = {};    // 前期資料 key=id → row
+let momoSortField = 'orders';
+let momoSortDir = -1;    // -1 降冪
+
+try { momoApiUrl = localStorage.getItem('momo_api_url') || ''; } catch(e) {}
+
+function momoSaveApiUrl() {
+  const v = (document.getElementById('momo-api-url').value || '').trim();
+  if (!v) { alert('請輸入 Apps Script Web App 網址'); return; }
+  momoApiUrl = v;
+  try { localStorage.setItem('momo_api_url', v); } catch(e) {}
+  document.getElementById('momo-api-status').textContent = '✅ 已儲存';
+  setTimeout(() => document.getElementById('momo-api-status').textContent = '', 2000);
+  momoInit();
+}
+
+async function momoCallApi(params) {
+  const url = momoApiUrl + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+function momoSetStatus(msg, type) {
+  const el = document.getElementById('momo-status-msg');
+  if (el) el.textContent = msg;
+}
+
+// ============================================================
+// 初始化：載入廠商清單
+// ============================================================
+async function momoInit() {
+  const urlInput = document.getElementById('momo-api-url');
+  if (urlInput && momoApiUrl) urlInput.value = momoApiUrl;
+
+  // 共用商品資料庫的廠商清單
+  if (pdClients && pdClients.length) {
+    momoClients = pdClients.filter(c => c.platforms && c.platforms.momo);
+    momoRenderClientList();
+    return;
+  }
+  if (!momoApiUrl) { momoSetStatus('請先輸入 Apps Script 網址'); return; }
+  try {
+    const data = await momoCallApi({ action: 'getClients' });
+    momoClients = (data.clients || []).filter(c => c.platforms && c.platforms.momo);
+    momoRenderClientList();
+  } catch(e) {
+    momoSetStatus('❌ 載入失敗：' + e.message);
+  }
+}
+
+function momoRenderClientList() {
+  const wrap = document.getElementById('momo-client-list');
+  if (!wrap) return;
+  if (!momoClients.length) {
+    wrap.innerHTML = '<span style="font-size:12px;color:var(--text3);">尚無廠商</span>';
+    return;
+  }
+  wrap.innerHTML = momoClients.map(c => {
+    const isActive = c.name === momoCurrentClient;
+    return `<button onclick="momoSelectClient('${c.name}')"
+      style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:${isActive?'600':'400'};cursor:pointer;font-family:inherit;
+             border:1px solid ${isActive?'var(--momo)':'var(--glass-border)'};
+             background:${isActive?'rgba(255,77,106,0.12)':'transparent'};
+             color:${isActive?'var(--momo)':'var(--text2)'};transition:all .15s;">
+      ${c.name}
+    </button>`;
+  }).join('') + `<select class="mobile-client-select" onchange="momoSelectClient(this.value)">
+    <option value="">請選擇廠商</option>
+    ${momoClients.map(c => `<option value="${c.name}" ${c.name===momoCurrentClient?'selected':''}>${c.name}</option>`).join('')}
+  </select>`;
+}
+
+function momoSelectClient(name) {
+  momoCurrentClient = name;
+  momoRenderClientList();
+  momoAllRows = [];
+  momoPrevMap = {};
+  momoSortField = 'orders'; momoSortDir = -1;
+  momoRenderThead();
+  momoRenderTable([]);
+  document.getElementById('momo-kpi-row').style.display = 'none';
+  document.getElementById('momo-dl-btn').style.display = 'none';
+  momoSetStatus('已選擇：' + name + '，請設定日期區間後點「套用」');
+}
+
+function momoOnDateChange() {
+  // 日期改變時清空提示
+  document.getElementById('momo-date-hint').textContent = '';
+}
+
+// ============================================================
+// 載入資料：取得日期區間內所有檔案並合併
+// ============================================================
+async function momoLoadData() {
+  if (!momoCurrentClient) { momoSetStatus('請先選擇廠商'); return; }
+  if (!momoApiUrl) { momoSetStatus('請先設定 Apps Script 網址'); return; }
+
+  const from = document.getElementById('momo-date-from').value;
+  const to   = document.getElementById('momo-date-to').value;
+  if (!from || !to) { momoSetStatus('請設定日期區間'); return; }
+  if (from > to) { momoSetStatus('開始日期不能晚於結束日期'); return; }
+
+  const prevFrom = document.getElementById('momo-prev-from').value;
+  const prevTo   = document.getElementById('momo-prev-to').value;
+  const hasPrev  = prevFrom && prevTo && prevFrom <= prevTo;
+
+  momoSetStatus('載入中…');
+  momoPrevMap = {};
+  document.getElementById('momo-kpi-row').style.display = 'none';
+  document.getElementById('momo-dl-btn').style.display = 'none';
+
+  try {
+    // 取得所有可用日期
+    const datesData = await momoCallApi({ action: 'getMomoDates', client: momoCurrentClient });
+    const allDates = (datesData.dates || []).filter(d => d >= from && d <= to).sort();
+
+    if (!allDates.length) {
+      momoSetStatus('此日期區間無資料');
+      document.getElementById('momo-date-hint').textContent = '此區間無每日數據';
+      return;
+    }
+
+    document.getElementById('momo-date-hint').textContent = `找到 ${allDates.length} 天資料（${allDates[0]} ~ ${allDates[allDates.length-1]}）`;
+
+    // 合併所有日期的銷售 + 廣告資料
+    const salesMap = {};  // 品號 → { name, orders, sales, views, convRate }
+    const adMap    = {};  // 品號 → { impressions, clicks, adSales, adSpend, roas }
+
+    for (const date of allDates) {
+      momoSetStatus(`載入 ${date}…`);
+
+      // 銷售檔
+      try {
+        const salesRes = await momoCallApi({ action: 'getDailySales', client: momoCurrentClient, date });
+        if (salesRes.b64) {
+          const salesRows = momoParseB64(salesRes.b64, 'sales');
+          salesRows.forEach(r => {
+            if (!salesMap[r.id]) salesMap[r.id] = { name: r.name, orders: 0, sales: 0, views: 0 };
+            salesMap[r.id].orders += r.orders || 0;
+            salesMap[r.id].sales  += r.sales  || 0;
+            salesMap[r.id].views  += r.views  || 0;
+          });
+        }
+      } catch(e) { console.warn('sales error', date, e); }
+
+      // 廣告檔（日期+廣告）
+      try {
+        const adRes = await momoCallApi({ action: 'getDailyAd', client: momoCurrentClient, date });
+        if (adRes.b64) {
+          const adRows = momoParseB64(adRes.b64, 'ad');
+          adRows.forEach(r => {
+            if (!adMap[r.id]) adMap[r.id] = { impressions: 0, clicks: 0, adSales: 0, adSpend: 0 };
+            adMap[r.id].impressions += r.impressions || 0;
+            adMap[r.id].clicks      += r.clicks      || 0;
+            adMap[r.id].adSales     += r.adSales     || 0;
+            adMap[r.id].adSpend     += r.adSpend     || 0;
+          });
+        }
+      } catch(e) { console.warn('ad error', date, e); }
+    }
+
+    // 合併 salesMap + adMap
+    momoAllRows = Object.entries(salesMap).map(([id, s]) => {
+      const ad = adMap[id] || {};
+      const roas = ad.adSpend > 0 ? (ad.adSales / ad.adSpend) : null;
+      return {
+        id,
+        name:       s.name,
+        orders:     s.orders,
+        sales:      s.sales,
+        views:      s.views,
+        convRate:   s.views > 0 ? s.orders / s.views : null,
+        impressions: ad.impressions || null,
+        clicks:     ad.clicks      || null,
+        adSales:    ad.adSales     || null,
+        adSpend:    ad.adSpend     || null,
+        roas:       roas,
+      };
+    });
+
+    // 載入前期資料
+    if (hasPrev) {
+      momoSetStatus('載入前期資料…');
+      const prevDatesData = await momoCallApi({ action: 'getMomoDates', client: momoCurrentClient });
+      const prevDates = (prevDatesData.dates || []).filter(d => d >= prevFrom && d <= prevTo).sort();
+      const prevSalesMap = {};
+      const prevAdMap    = {};
+      for (const date of prevDates) {
+        try {
+          const r = await momoCallApi({ action: 'getDailySales', client: momoCurrentClient, date });
+          if (r.b64) momoParseB64(r.b64, 'sales').forEach(row => {
+            if (!prevSalesMap[row.id]) prevSalesMap[row.id] = { orders: 0, sales: 0, views: 0 };
+            prevSalesMap[row.id].orders += row.orders || 0;
+            prevSalesMap[row.id].sales  += row.sales  || 0;
+            prevSalesMap[row.id].views  += row.views  || 0;
+          });
+        } catch(e) {}
+        try {
+          const r = await momoCallApi({ action: 'getDailyAd', client: momoCurrentClient, date });
+          if (r.b64) momoParseB64(r.b64, 'ad').forEach(row => {
+            if (!prevAdMap[row.id]) prevAdMap[row.id] = { impressions: 0, clicks: 0, adSales: 0, adSpend: 0 };
+            prevAdMap[row.id].impressions += row.impressions || 0;
+            prevAdMap[row.id].clicks      += row.clicks      || 0;
+            prevAdMap[row.id].adSales     += row.adSales     || 0;
+            prevAdMap[row.id].adSpend     += row.adSpend     || 0;
+          });
+        } catch(e) {}
+      }
+      // 合併前期
+      momoPrevMap = {};
+      Object.entries(prevSalesMap).forEach(([id, s]) => {
+        const ad = prevAdMap[id] || {};
+        const roas = ad.adSpend > 0 ? ad.adSales / ad.adSpend : null;
+        momoPrevMap[id] = {
+          orders: s.orders, sales: s.sales, views: s.views,
+          convRate: s.views > 0 ? s.orders / s.views : null,
+          impressions: ad.impressions || null, clicks: ad.clicks || null,
+          adSales: ad.adSales || null, adSpend: ad.adSpend || null, roas,
+        };
+      });
+    }
+
+    momoSortField = 'orders';
+    momoSortDir   = -1;
+    momoSetStatus(`共 ${momoAllRows.length} 筆，${allDates.length} 天合計${hasPrev ? '　有前期對比資料' : ''}`);
+    momoUpdateKpi();
+    momoRenderThead();
+    document.getElementById('momo-kpi-row').style.display = 'grid';
+    document.getElementById('momo-dl-btn').style.display = 'inline-block';
+    momoFilterTable(document.getElementById('momo-search').value || '');
+
+  } catch(e) {
+    momoSetStatus('❌ 載入失敗：' + e.message);
+  }
+}
+
+// ============================================================
+// 解析 base64 xlsx
+// ============================================================
+function momoParseB64(b64, type) {
+  const wb  = XLSX.read(b64, { type: 'base64' });
+  // 銷售檔找「銷售表現」工作表，廣告找第一個
+  let sheetName = wb.SheetNames[0];
+  if (type === 'sales') {
+    sheetName = wb.SheetNames.find(n => n.includes('銷售表現')) || wb.SheetNames[0];
+  }
+  const arr = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '' });
+
+  // 找 header 列
+  let hIdx = -1;
+  for (let i = 0; i < Math.min(arr.length, 10); i++) {
+    const row = arr[i].map(v => String(v || '').trim());
+    if (type === 'sales' && row.includes('品號'))    { hIdx = i; break; }
+    if (type === 'ad'    && row.includes('商品ID'))  { hIdx = i; break; }
+  }
+  if (hIdx === -1) return [];
+
+  const headers = arr[hIdx].map(v => String(v || '').trim());
+  const ci = k => headers.indexOf(k);
+  const toNum = v => { const n = parseFloat(String(v || '').replace(/[,%]/g, '')); return isNaN(n) ? 0 : n; };
+  const rows = [];
+
+  if (type === 'sales') {
+    const idI   = ci('品號');
+    const nmI   = ci('商品名稱');
+    const ordI  = ci('訂購數');
+    const salI  = ci('訂購金額');
+    const vwI   = ci('瀏覽量');
+    const cvI   = ci('商品成交率');
+    for (let i = hIdx + 1; i < arr.length; i++) {
+      const r = arr[i];
+      const id = String(r[idI] || '').trim();
+      if (!id) continue;
+      rows.push({
+        id,
+        name:     String(r[nmI]  || '').trim(),
+        orders:   toNum(r[ordI]),
+        sales:    toNum(r[salI]),
+        views:    toNum(r[vwI]),
+        convRate: null, // 由訂購數÷瀏覽量計算
+      });
+    }
+  } else {
+    const idI   = ci('商品ID');
+    const impI  = ci('曝光數');
+    const clkI  = ci('點擊數');
+    const asI   = ci('商品訂購金額');
+    const spI   = ci('已花費');
+    const roasI = ci('投入產出比');
+    for (let i = hIdx + 1; i < arr.length; i++) {
+      const r = arr[i];
+      const id = String(r[idI] || '').trim();
+      if (!id) continue;
+      rows.push({
+        id,
+        impressions: toNum(r[impI]),
+        clicks:      toNum(r[clkI]),
+        adSales:     toNum(r[asI]),
+        adSpend:     toNum(r[spI]),
+        roas:        roasI >= 0 ? toNum(r[roasI]) : null,
+      });
+    }
+  }
+  return rows;
+}
+
+// ============================================================
+// KPI 更新
+// ============================================================
+function momoUpdateKpi() {
+  const sum = (field) => momoAllRows.reduce((acc, r) => acc + (r[field] || 0), 0);
+  const fmt = n => '$' + Math.round(n).toLocaleString('zh-TW');
+  document.getElementById('momo-kpi-orders').textContent   = sum('orders').toLocaleString('zh-TW');
+  document.getElementById('momo-kpi-sales').textContent    = fmt(sum('sales'));
+  document.getElementById('momo-kpi-ad-sales').textContent = fmt(sum('adSales'));
+  document.getElementById('momo-kpi-ad-spend').textContent = fmt(sum('adSpend'));
+}
+
+// ============================================================
+// 排序
+// ============================================================
+// 欄位定義
+const MOMO_COLS = [
+  { key: 'id',          label: '品號',     align: 'left',  isAd: false },
+  { key: 'name',        label: '商品名稱', align: 'left',  isAd: false },
+  { key: 'orders',      label: '訂購數',   align: 'right', isAd: false },
+  { key: 'sales',       label: '訂購金額', align: 'right', isAd: false },
+  { key: 'views',       label: '瀏覽量',   align: 'right', isAd: false },
+  { key: 'convRate',    label: '商品成交率', align: 'right', isAd: false },
+  { key: 'impressions', label: '曝光',     align: 'right', isAd: true  },
+  { key: 'clicks',      label: '點擊',     align: 'right', isAd: true  },
+  { key: 'adSales',     label: '廣告收入', align: 'right', isAd: true  },
+  { key: 'adSpend',     label: '廣告支出', align: 'right', isAd: true  },
+  { key: 'roas',        label: '投產比',   align: 'right', isAd: true  },
+];
+
+function momoRenderThead() {
+  const tr = document.getElementById('momo-thead-row');
+  if (!tr) return;
+  tr.innerHTML = MOMO_COLS.map(col => {
+    const isActive = col.key === momoSortField;
+    const arrow = isActive ? (momoSortDir === -1 ? ' ↓' : ' ↑') : ' ↕';
+    const bg  = col.isAd ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.06)';
+    const clr = col.isAd ? 'rgba(91,164,232,0.9)'  : 'rgba(255,255,255,0.55)';
+    const activeClr = 'rgba(255,255,255,0.9)';
+    return `<th onclick="momoSortBy('${col.key}')"
+      style="padding:9px 12px;font-size:11px;font-weight:600;color:${isActive?activeClr:clr};
+             background:${bg};border-bottom:1px solid rgba(255,255,255,0.1);
+             text-align:${col.align};white-space:nowrap;cursor:pointer;user-select:none;
+             ${col.key==='name'?'min-width:200px;':''}">
+      ${col.label}<span style="font-size:10px;opacity:${isActive?1:.5};">${arrow}</span>
+    </th>`;
+  }).join('');
+}
+
+function momoSortBy(field) {
+  if (momoSortField === field) momoSortDir *= -1;
+  else { momoSortField = field; momoSortDir = -1; }
+  momoRenderThead();
+  momoFilterTable(document.getElementById('momo-search').value || '');
+}
+
+// ============================================================
+// 搜尋 + 渲染表格
+// ============================================================
+function momoFilterTable(q) {
+  let rows = [...momoAllRows];
+  if (q && q.trim()) rows = rows.filter(r => r.name.toLowerCase().includes(q.toLowerCase()) || r.id.includes(q));
+
+  // 排序
+  rows.sort((a, b) => {
+    const av = a[momoSortField] ?? -1;
+    const bv = b[momoSortField] ?? -1;
+    return (av - bv) * momoSortDir;
+  });
+
+  document.getElementById('momo-row-count').textContent = rows.length ? `共 ${rows.length} 筆` : '';
+  momoRenderTable(rows);
+}
+
+function momoRenderTable(rows) {
+  const tbody = document.getElementById('momo-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="padding:50px;text-align:center;color:var(--text3);">${momoAllRows.length ? '無符合條件的商品' : '請選擇廠商與日期區間'}</td></tr>`;
+    return;
+  }
+
+  const fmt    = n => n != null ? '$' + Math.round(n).toLocaleString('zh-TW') : '—';
+  const fmtN   = n => n != null ? Math.round(n).toLocaleString('zh-TW') : '—';
+  const fmtPct = n => n != null ? (n * 100).toFixed(1) + '%' : '—';
+  const fmtR   = n => n != null ? n.toFixed(2) : '—';
+  const tdBase = 'padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.07);';
+  const tdR    = tdBase + 'text-align:right;color:rgba(255,255,255,0.82);';
+  const tdL    = tdBase + 'color:rgba(255,255,255,0.88);';
+  const tdAd   = tdBase + 'text-align:right;color:rgba(255,255,255,0.82);background:rgba(91,164,232,0.04);';
+
+  const mkTt = (curr, prev, label, fmtFn) => {
+    if (prev == null || !Object.keys(momoPrevMap).length) return '';
+    const diff = curr != null && prev != null ? curr - prev : null;
+    const pct  = diff != null && prev > 0 ? (diff / prev * 100) : null;
+    const arrow = diff == null ? '' : diff > 0 ? '▲' : diff < 0 ? '▼' : '＝';
+    const clr   = diff == null ? '' : diff > 0 ? '#f07070' : diff < 0 ? '#3ecfaa' : 'rgba(255,255,255,0.5)';
+    return `data-prev="${label}前期：${fmtFn(prev)}　${arrow} ${diff!=null?Math.abs(diff).toLocaleString('zh-TW'):''}${pct!=null?' ('+Math.abs(pct).toFixed(1)+'%)':''}" data-clr="${clr}"`;
+  };
+
+  tbody.innerHTML = rows.map(r => {
+    const p = momoPrevMap[r.id] || null;
+    const mkCell = (val, prev, label, fmtFn, style) => {
+      if (!p || prev == null) return `<td style="${style}">${fmtFn(val)}</td>`;
+      const diff = val != null && prev != null ? val - prev : null;
+      const pct  = diff != null && prev > 0 ? (diff / prev * 100).toFixed(1) : null;
+      const arrow = diff == null ? '' : diff > 0 ? ' ▲' : diff < 0 ? ' ▼' : '';
+      const clr   = diff == null ? '' : diff > 0 ? '#f07070' : diff < 0 ? '#3ecfaa' : '';
+      const tt = `前期：${fmtFn(prev)}　${arrow}${diff!=null?Math.abs(diff).toLocaleString('zh-TW'):''}${pct?' ('+Math.abs(pct)+'%)':''}`;
+      return `<td style="${style}cursor:default;" class="momo-tt-cell" data-tt="${tt}" data-clr="${clr}">${fmtFn(val)}</td>`;
+    };
+    return `<tr style="transition:background .13s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
+    <td style="${tdL}font-size:11px;color:rgba(255,255,255,0.5);">${r.id}</td>
+    <td style="${tdL}max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.name}">${r.name}</td>
+    ${mkCell(r.orders,      p?.orders,      '訂購數',   fmtN,  tdR+'font-weight:500;')}
+    ${mkCell(r.sales,       p?.sales,       '訂購金額', fmt,   tdR)}
+    ${mkCell(r.views,       p?.views,       '瀏覽量',   fmtN,  tdR)}
+    ${mkCell(r.convRate,    p?.convRate,    '成交率',   fmtPct,tdR)}
+    ${mkCell(r.impressions, p?.impressions, '曝光',     fmtN,  tdAd)}
+    ${mkCell(r.clicks,      p?.clicks,      '點擊',     fmtN,  tdAd)}
+    ${mkCell(r.adSales,     p?.adSales,     '廣告收入', fmt,   tdAd)}
+    ${mkCell(r.adSpend,     p?.adSpend,     '廣告支出', fmt,   tdAd)}
+    <td style="${tdAd}font-weight:${r.roas!=null?'500':'400'};color:${r.roas!=null&&r.roas>=3?'#3ecfaa':r.roas!=null&&r.roas<1?'#f07070':'rgba(255,255,255,0.82)'};">${fmtR(r.roas)}</td>
+  </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// 下載 Excel
+// ============================================================
+function momoDownload() {
+  if (!momoAllRows.length || !momoCurrentClient) return;
+  const from = document.getElementById('momo-date-from').value;
+  const to   = document.getElementById('momo-date-to').value;
+  const fmt  = n => n != null ? Math.round(n) : '';
+  const fmtR = n => n != null ? parseFloat(n.toFixed(2)) : '';
+  const fmtP = n => n != null ? parseFloat((n * 100).toFixed(1)) : '';
+
+  const headers = ['品號','商品名稱','訂購數','訂購金額','瀏覽量','商品成交率(%)','曝光','點擊','廣告收入','廣告支出','投產比'];
+  const rows = momoAllRows
+    .sort((a,b) => (b[momoSortField]||0) - (a[momoSortField]||0))
+    .map(r => [r.id, r.name, fmt(r.orders), fmt(r.sales), fmt(r.views), fmtP(r.convRate), fmt(r.impressions), fmt(r.clicks), fmt(r.adSales), fmt(r.adSpend), fmtR(r.roas)]);
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:12},{wch:50},{wch:8},{wch:12},{wch:8},{wch:12},{wch:8},{wch:8},{wch:12},{wch:10},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws, momoCurrentClient);
+  XLSX.writeFile(wb, `Momo_${momoCurrentClient}_${from}_${to}.xlsx`);
+}
+
+function mSwitchTab(idx) {} // 保留空函式避免舊呼叫報錯
+
+// Momo tooltip
+(function() {
+  const tt = document.getElementById('momo-tt');
+  if (!tt) return;
+  document.addEventListener('mouseover', function(e) {
+    const cell = e.target.closest('.momo-tt-cell[data-tt]');
+    if (!cell) return;
+    const clr = cell.dataset.clr || 'rgba(255,255,255,0.88)';
+    tt.innerHTML = `<span style="color:${clr}">${cell.dataset.tt}</span>`;
+    tt.style.display = 'block';
+    const rect = cell.getBoundingClientRect();
+    let top = rect.top - tt.offsetHeight - 8;
+    let left = rect.left;
+    if (top < 8) top = rect.bottom + 8;
+    if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+    tt.style.top  = top  + 'px';
+    tt.style.left = left + 'px';
+  });
+  document.addEventListener('mouseout', function(e) {
+    const cell = e.target.closest('.momo-tt-cell[data-tt]');
+    if (!cell) return;
+    if (!cell.contains(e.relatedTarget)) tt.style.display = 'none';
+  });
+})();
+
+</script>
+
+</div><!-- end app-screen -->
+
+<script>
+// ============================================================
+// 手機版側邊欄開關 + 設定 Modal
+// ============================================================
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const isOpen = sidebar.classList.toggle('open');
+  overlay.classList.toggle('show', isOpen);
+}
+function closeSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+// 切換工具時自動關閉側欄（手機）
+const _origSwitchTool = window.switchTool;
+window.switchTool = function(tool) {
+  if (typeof _origSwitchTool === 'function') _origSwitchTool(tool);
+  if (window.innerWidth <= 768) closeSidebar();
+};
+
+// 手機版 header 加左側 padding 避免被漢堡按鈕蓋住
+function openSettings() {
+  const modal = document.getElementById('settings-modal');
+  const input = document.getElementById('settings-api-url');
+  // 讀取目前儲存的網址
+  try { input.value = localStorage.getItem('pd_api_url') || ''; } catch(e) {}
+  modal.style.display = 'flex';
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+}
+
+function saveSettingsUrl() {
+  const v = (document.getElementById('settings-api-url').value || '').trim();
+  if (!v) { alert('請輸入 Apps Script 網址'); return; }
+
+  // 同步儲存到所有功能的 localStorage
+  try {
+    localStorage.setItem('pd_api_url', v);
+    localStorage.setItem('momo_api_url', v);
+    localStorage.setItem('shopee_analysis_api_url', v);
+    localStorage.setItem('tracker_api_url', v);
+  } catch(e) {}
+
+  // 同步更新各功能的 apiUrl 變數
+  PD_API_URL    = v;
+  momoApiUrl    = v;
+  shopeeApiUrl  = v;
+  trackerApiUrl = v;
+
+  // 同步更新電腦版輸入框
+  ['pd-api-url','momo-api-url','shopee-api-url','tracker-api-url'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  });
+
+  const msg = document.getElementById('settings-save-msg');
+  msg.textContent = '✅ 已儲存，重新載入廠商中…';
+  setTimeout(() => {
+    closeSettings();
+    msg.textContent = '';
+    // 重新初始化所有功能
+    if (typeof pdInit === 'function') pdInit();
+  }, 800);
+}
+
+// 點 Modal 背景關閉
+document.getElementById('settings-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+function applyMobileHeaderPadding() {
+  const isMobile = window.innerWidth <= 768;
+  document.querySelectorAll('.db-header, #tool-shopee .page-header, #tool-momo .header').forEach(el => {
+    el.style.paddingLeft = isMobile ? '56px' : '';
+  });
+}
+window.addEventListener('resize', applyMobileHeaderPadding);
+applyMobileHeaderPadding();
+</script>
+</body>
+</html>
